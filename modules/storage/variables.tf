@@ -15,9 +15,9 @@ variable "environment" {
 # 최종 레포명은 <project>-<env>-<name> → cicd 역할의 push 대상(hailcast-dev-*)과 자동으로 맞물린다.
 # 정적 리스트라 for_each 에 안전하다(apply 시점에 이미 값이 확정됨).
 variable "repositories" {
-  description = "ECR 레포로 만들 서비스 짧은 이름 목록. 실제 앱 서비스에 맞게 조정한다."
+  description = "ECR 레포로 만들 서비스 짧은 이름 목록. app 레포의 Dockerfile·manifests apps/ 와 1:1 로 맞춘다."
   type        = list(string)
-  default     = ["predictor"]
+  default     = ["call-api", "predict", "weather-cron", "worker"]
 }
 
 # 보관할 태그 이미지 개수. 초과분은 오래된 것부터 자동 만료(비용 통제).
