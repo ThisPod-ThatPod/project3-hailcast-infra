@@ -4,7 +4,7 @@ terraform {
     bucket         = "tfstate-bucket-9dcbc7fe"
     key            = "dev/terraform.tfstate"
     region         = "ap-northeast-2"
-    dynamodb_table = "terraform-lock"
+    dynamodb_table = "hailcast-dev-tfstate-lock"
     encrypt        = true
   }
 }
