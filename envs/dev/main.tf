@@ -31,6 +31,14 @@ module "eks" {
   environment  = var.environment
 }
 
+# ── 스토리지: app 이미지용 ECR 레포(call-api·predict·weather-cron·worker) + S3 ──
+module "storage" {
+  source = "../../modules/storage"
+
+  project_name = var.project_name
+  environment  = var.environment
+}
+
 # ── CI/CD: GitHub Actions OIDC + ECR push 역할 ──
 module "cicd" {
   source = "../../modules/cicd"
