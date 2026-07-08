@@ -39,3 +39,55 @@ resource "aws_secretsmanager_secret_version" "db_credentials" {
     password = random_password.db.result
   })
 }
+
+# ── RDS 보안그룹 ──
+# 규약서 §5-5: RDS SG 는 '5432 를 노드 SG 에서 온 것만' 허용해야 한다.
+# 그러나 노드 SG 는 eks 클러스터/노드그룹과 함께 아직 생성 전이라 지금은 대상이 없다.
+# → SG 는 zero-inbound(인바운드 규칙 0개)로 먼저 만들고, 5432 ingress 는
+#   노드 SG 가 생기는 PR 에서 aws_vpc_security_group_ingress_rule 로 추가한다.
+resource "aws_security_group" "rds" {
+  name        = "${local.name_prefix}-sg-rds"
+  description = "RDS(PostgreSQL) - 5432 inbound from node SG only (ingress는 노드 SG 생성 후 추가)"
+  vpc_id      = var.vpc_id
+
+  # RDS 는 아웃바운드를 먼저 개시하지 않지만, 관례상 전체 egress 허용(보안 초점은 zero-inbound).
+  egress {
+    description = "all outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-sg-rds"
+  }
+}
+
+# ── RDS 인스턴스 (서브모듈) ──
+# 비번은 root 로 output 하지 않고, 위에서 만든 random_password 를 여기서 '내부 전달'한다.
+# → 시크릿(Secrets Manager)에 저장된 값과 실제 DB 비번이 항상 같은 소스로 일치한다.
+module "rds" {
+  source = "./rds"
+
+  project_name           = var.project_name
+  environment            = var.environment
+  db_name                = var.db_name
+  db_username            = var.db_username
+  db_password            = random_password.db.result
+  instance_class         = var.instance_class
+  engine_version         = var.engine_version
+  allocated_storage      = var.allocated_storage
+  subnet_ids             = var.private_subnet_ids
+  vpc_security_group_ids = [aws_security_group.rds.id]
+  rds_availability_zone  = var.rds_availability_zone
+}
+
+# ── DB 주소를 Parameter Store 에 게시 (비밀 아님 → 무료 Parameter Store) ──
+# 규약서 §5-4: /hailcast/dev/rds/endpoint. 앱이 이 경로로 접속 주소를 읽는다.
+resource "aws_ssm_parameter" "rds_endpoint" {
+  name        = "/${var.project_name}/${var.environment}/rds/endpoint"
+  description = "RDS(PostgreSQL) 접속 엔드포인트 (host:port). 비밀 아님."
+  type        = "String"
+  value       = module.rds.primary_endpoint
+}

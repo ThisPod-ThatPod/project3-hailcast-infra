@@ -10,3 +10,13 @@ output "db_credentials_secret_name" {
   description = "RDS 자격증명 시크릿 이름."
   value       = aws_secretsmanager_secret.db_credentials.name
 }
+
+output "rds_endpoint" {
+  description = "RDS 접속 엔드포인트 (host:port). 앱·KEDA 가 참조하는 계약값(§7)."
+  value       = module.rds.primary_endpoint
+}
+
+output "rds_security_group_id" {
+  description = "RDS SG ID. 노드 SG 생성 PR 에서 5432 ingress 규칙이 이 SG 를 대상으로 붙는다."
+  value       = aws_security_group.rds.id
+}
