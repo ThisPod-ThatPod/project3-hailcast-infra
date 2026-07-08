@@ -35,6 +35,12 @@ output "eks_node_iam_role_arn" {
   value       = module.eks.node_iam_role_arn
 }
 
+# ── 스토리지 ──
+output "ecr_repository_urls" {
+  description = "ECR 레포 이름→URL 맵(app CI push 대상 · manifests 이미지 경로)."
+  value       = module.storage.repository_urls
+}
+
 # ── CI/CD ──
 output "github_actions_role_arn" {
   description = "GitHub Actions 워크플로가 assume 할 역할 ARN."

@@ -38,11 +38,11 @@ variable "availability_zones" {
 variable "public_subnet_cidrs" {
   description = "퍼블릭 서브넷 CIDR(대문 쪽: LB·NAT)."
   type        = list(string)
-  default     = ["10.0.0.0/24", "10.0.1.0/24"]
+  default     = ["10.0.0.0/20", "10.0.16.0/20"]
 }
 
 variable "private_subnet_cidrs" {
   description = "프라이빗 서브넷 CIDR(집 안쪽: EKS 노드·파드)."
   type        = list(string)
-  default     = ["10.0.10.0/24", "10.0.11.0/24"]
+  default     = ["10.0.32.0/20", "10.0.48.0/20"]
 }
