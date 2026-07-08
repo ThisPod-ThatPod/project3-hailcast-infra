@@ -4,11 +4,6 @@ variable "project_name" {
   type        = string
 }
 
-variable "aws_region" {
-  description = "AWS 리전 (게이트웨이 엔드포인트 service_name 구성용)."
-  type        = string
-}
-
 variable "environment" {
   description = "배포 환경"
   type        = string
