@@ -89,9 +89,11 @@ module "rds" {
 
 # ── DB 주소를 Parameter Store 에 게시 (비밀 아님 → 무료 Parameter Store) ──
 # 규약서 §5-4: /hailcast/dev/rds/endpoint. 앱이 이 경로로 접속 주소를 읽는다.
+# 포트(5432)는 PostgreSQL 고정값이라 여기엔 '호스트명만' 저장한다(rds.address).
+# → 앱은 host + 5432 로 조합해 접속. rds 서브모듈의 address output 설명과도 일치.
 resource "aws_ssm_parameter" "rds_endpoint" {
   name        = "/${var.project_name}/${var.environment}/rds/endpoint"
-  description = "RDS(PostgreSQL) 접속 엔드포인트 (host:port). 비밀 아님."
+  description = "RDS(PostgreSQL) 호스트명(포트 제외). 비밀 아님."
   type        = "String"
-  value       = module.rds.primary_endpoint
+  value       = module.rds.address
 }
