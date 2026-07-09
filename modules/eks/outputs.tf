@@ -39,3 +39,14 @@ output "oidc_issuer_url" {
   description = "클러스터 OIDC issuer URL. IRSA 조건(sub/aud)에서 참조."
   value       = aws_eks_cluster.this.identity[0].oidc[0].issuer
 }
+
+# ── 노드그룹 (M2) ──
+output "node_security_group_id" {
+  description = "전용 노드 SG ID. M4 에서 RDS 5432 ingress 가 이 SG 를 지목한다(§5-5)."
+  value       = aws_security_group.node.id
+}
+
+output "node_group_name" {
+  description = "system 관리형 노드그룹 이름."
+  value       = aws_eks_node_group.system.node_group_name
+}

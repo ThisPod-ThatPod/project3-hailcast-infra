@@ -19,7 +19,8 @@ resource "aws_eks_cluster" "this" {
   }
 
   # 접근제어는 최신 Access Entry(API) 방식. 클러스터 생성자(apply 주체)에게 admin 을 자동 부여해
-  # 락아웃을 막는다. 추가 관리자 access entry 는 노드그룹 PR(M2)에서 얹는다.
+  # 락아웃을 막는다. 추가 관리자 access entry 는 특정 관리자 principal(IAM 역할)이 정해지면
+  # 그때 얹는다 — 생성자 admin 부트스트랩으로 충분해 데모 범위에선 YAGNI.
   access_config {
     authentication_mode                         = "API_AND_CONFIG_MAP"
     bootstrap_cluster_creator_admin_permissions = true

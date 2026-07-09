@@ -1,0 +1,121 @@
+# eks 모듈 - nodegroup.tf
+# system 관리형 노드그룹 + 전용 노드 SG + launch template. (M2)
+#   - 이 노드그룹엔 '플랫폼'만 산다: CoreDNS·Karpenter·KEDA·ArgoCD·Prometheus 등(§5-3).
+#     앱 파드는 Karpenter 가 0부터 띄우는 별도 노드로 감 → 이건 고정 베이스라인.
+#   - launch template 를 쓰는 이유 2가지:
+#       ① 전용 노드 SG 부착(RDS 가 5432 를 '노드 SG 에서 온 것만' 허용 — §5-5, M4 에서 연결)
+#       ② 노드 EC2·EBS 에 비용 태그 직접 부착(관리형 노드그룹은 default_tags 가 인스턴스까지 전파 안 됨)
+
+# ── 노드 SG (zero-inbound) ──
+# 인바운드 규칙 0개. 노드↔노드·컨트롤플레인 통신은 EKS 클러스터 SG(자동·self 허용)가 담당하고,
+# 이 SG 는 'RDS 가 지목할 대상(§5-5)'이자 향후 타깃 규칙의 앵커 역할만 한다.
+# (SG 는 '허용'만 하므로 zero-inbound 여도 클러스터 SG 의 노드간 허용을 막지 않는다.)
+resource "aws_security_group" "node" {
+  name        = "${local.name_prefix}-sg-eks-node"
+  description = "EKS 노드/파드용. inbound 0(클러스터 SG가 노드간 통신 담당) · RDS 5432 ingress의 지목 대상"
+  vpc_id      = var.vpc_id
+
+  tags = merge(var.tags, { Name = "${local.name_prefix}-sg-eks-node" })
+}
+
+# egress 는 독립 리소스로(인라인/독립 혼용 금지 — data 모듈 RDS SG 와 동일 기조).
+resource "aws_vpc_security_group_egress_rule" "node_all" {
+  security_group_id = aws_security_group.node.id
+  description       = "all outbound"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+# ── Launch template ──
+# image_id 를 지정하지 않으면 EKS 가 ami_type(AL2023)에 맞는 최적화 AMI 를 자동 주입한다.
+# → AMI 관리는 EKS 에 맡기고, 우리는 SG·태그·IMDS 만 얹는다.
+resource "aws_launch_template" "node" {
+  name_prefix = "${local.name_prefix}-eks-system-"
+
+  # 클러스터 SG(노드간·CP 통신) + 전용 노드 SG(RDS 지목 대상) 둘 다 부착.
+  # LT 에 SG 를 지정하면 EKS 가 클러스터 SG 를 자동으로 안 붙이므로 여기서 명시한다.
+  vpc_security_group_ids = [
+    aws_eks_cluster.this.vpc_config[0].cluster_security_group_id,
+    aws_security_group.node.id,
+  ]
+
+  # IMDSv2 강제(자격증명 탈취형 SSRF 차단). hop_limit=2 는 파드 IMDS 접근 여지를 남긴다.
+  metadata_options {
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+  }
+
+  # 노드 루트 볼륨 암호화 — RDS(storage_encrypted)와 저장 암호화 일관성. gp3 암호화는 무비용.
+  block_device_mappings {
+    device_name = "/dev/xvda" # AL2023 루트 디바이스
+    ebs {
+      volume_size = 30
+      volume_type = "gp3"
+      encrypted   = true
+    }
+  }
+
+  # ⚠️ default_tags 는 'Terraform 리소스의 tags'에만 붙고 tag_specifications 엔 안 먹는다.
+  #    → 노드 EC2·EBS 는 여기서 비용 태그(Project/Environment/ManagedBy)를 '명시적으로' 박아야
+  #      FinOps 집계에서 안 샌다(비용런북 §3-2 A). 모듈 관례상 유일하게 tags 를 직접 다루는 곳.
+  tag_specifications {
+    resource_type = "instance"
+    tags = merge(var.tags, {
+      Name        = "${local.name_prefix}-eks-system-node"
+      Project     = var.project_name
+      Environment = var.environment
+      ManagedBy   = "terraform"
+    })
+  }
+  tag_specifications {
+    resource_type = "volume"
+    tags = merge(var.tags, {
+      Name        = "${local.name_prefix}-eks-system-vol"
+      Project     = var.project_name
+      Environment = var.environment
+      ManagedBy   = "terraform"
+    })
+  }
+
+  tags = merge(var.tags, { Name = "${local.name_prefix}-eks-system-lt" })
+}
+
+# ── system 관리형 노드그룹 (2× t3.large · 2AZ · AL2023) ──
+resource "aws_eks_node_group" "system" {
+  cluster_name    = aws_eks_cluster.this.name
+  node_group_name = "${local.name_prefix}-eks-system-ng"
+  node_role_arn   = aws_iam_role.node.arn
+  subnet_ids      = var.private_subnet_ids # 2 AZ → HA
+
+  ami_type       = "AL2023_x86_64_STANDARD" # AL2 금지(1.33+), AL2023 최적화 AMI
+  instance_types = var.node_instance_types
+
+  scaling_config {
+    min_size     = var.node_min_size     # 2 (HA)
+    desired_size = var.node_desired_size # 2
+    max_size     = var.node_max_size     # 3 (롤링·여유 상한)
+  }
+
+  update_config {
+    max_unavailable = 1 # 업데이트 시 한 번에 한 노드만 교체
+  }
+
+  launch_template {
+    id      = aws_launch_template.node.id
+    version = aws_launch_template.node.latest_version
+  }
+
+  labels = {
+    "hailcast.io/role" = "system"
+  }
+
+  # 노드 역할 정책(iam.tf, for_each)이 붙은 뒤 노드그룹을 만든다(클러스터 조인 실패 방지).
+  depends_on = [aws_iam_role_policy_attachment.node]
+
+  tags = merge(var.tags, { Name = "${local.name_prefix}-eks-system-ng" })
+
+  lifecycle {
+    # desired_size 는 운영 중 바뀔 수 있으니 drift 로 되돌리지 않는다.
+    ignore_changes = [scaling_config[0].desired_size]
+  }
+}

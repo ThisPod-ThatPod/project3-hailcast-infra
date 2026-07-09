@@ -61,6 +61,11 @@ output "eks_oidc_provider_arn" {
   value       = module.eks.oidc_provider_arn
 }
 
+output "eks_node_security_group_id" {
+  description = "전용 노드 SG ID(M4 RDS 5432 ingress 가 이 SG 를 지목)."
+  value       = module.eks.node_security_group_id
+}
+
 # ── 스토리지 ──
 output "ecr_repository_urls" {
   description = "ECR 레포 이름→URL 맵(app CI push 대상 · manifests 이미지 경로)."

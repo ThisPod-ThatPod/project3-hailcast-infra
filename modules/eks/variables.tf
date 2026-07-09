@@ -35,3 +35,34 @@ variable "public_access_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+# ── 노드그룹(M2) 입력 ──
+
+variable "vpc_id" {
+  description = "노드 SG 를 붙일 VPC ID (network 출력)."
+  type        = string
+}
+
+variable "node_instance_types" {
+  description = "system 노드그룹 인스턴스 타입. 플랫폼(ArgoCD·Prometheus) 수용 위해 t3.large."
+  type        = list(string)
+  default     = ["t3.large"]
+}
+
+variable "node_min_size" {
+  description = "system 노드그룹 최소 노드 수(HA 위해 2)."
+  type        = number
+  default     = 2
+}
+
+variable "node_desired_size" {
+  description = "system 노드그룹 희망 노드 수."
+  type        = number
+  default     = 2
+}
+
+variable "node_max_size" {
+  description = "system 노드그룹 최대 노드 수(롤링·일시 여유 상한)."
+  type        = number
+  default     = 3
+}
