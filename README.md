@@ -57,7 +57,7 @@ VPC `10.0.0.0/16` · AZ `2a·2c` 기준.
 
 | 계층 | 구성 |
 | --- | --- |
-| 엣지/진입 | (CloudFront) → **ALB**(Ingress) + ALB Controller |
+| 엣지/진입 | **ALB**(Ingress) + ALB Controller · *(Route53 + CloudFront — 커스텀 도메인·HTTPS·CDN, 미적용 시 ALB 자동 주소 사용)* |
 | 컴퓨트 (EKS·Private) | 콜 API · 워커 · 예측 · CronJob 3종 · addons(KEDA·HPA·Karpenter·ArgoCD) |
 | 데이터/관리형 | **S3**(모델·예측JSON) · ECR · SQS(콜 큐) · **RDS PostgreSQL(Single-AZ)** · DynamoDB(오답노트) · Secrets Manager |
 | 접근/보안 | **SSM Session Manager**(Bastion 대체, zero-inbound) · IAM/IRSA 최소 권한 |
