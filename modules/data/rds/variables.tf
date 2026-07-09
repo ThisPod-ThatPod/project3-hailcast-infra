@@ -53,8 +53,3 @@ variable "rds_availability_zone" {
   description = "RDS 인스턴스를 고정할 가용 영역 (Private Subnet A 위치)"
   type        = string
 }
-
-variable "rds_multi_az" {
-  description = "Multi-AZ 활성화 여부 (false 고정)"
-  type        = bool
-}
