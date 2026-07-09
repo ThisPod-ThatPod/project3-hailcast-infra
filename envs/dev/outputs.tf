@@ -24,6 +24,11 @@ output "db_credentials_secret_arn" {
   value       = module.data.db_credentials_secret_arn
 }
 
+output "rds_endpoint" {
+  description = "RDS 접속 엔드포인트(host:port). 앱 DB 연결·KEDA 참조 계약값."
+  value       = module.data.rds_endpoint
+}
+
 # ── EKS 선행 IAM (클러스터 생성 시 주입) ──
 output "eks_cluster_iam_role_arn" {
   description = "EKS 컨트롤플레인 역할 ARN."

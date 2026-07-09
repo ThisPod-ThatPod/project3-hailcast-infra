@@ -15,12 +15,16 @@ module "network" {
   private_subnet_cidrs = var.private_subnet_cidrs
 }
 
-# ── 데이터: RDS 자격증명을 Secrets Manager 로 관리 ──
+# ── 데이터: RDS(PostgreSQL) + 자격증명(Secrets Manager) + DB 주소(Parameter Store) ──
+# network 출력을 스레딩해 RDS 를 프라이빗 서브넷에 배치한다. AZ 는 목록 첫째(Single-AZ 데모).
 module "data" {
   source = "../../modules/data"
 
-  project_name = var.project_name
-  environment  = var.environment
+  project_name          = var.project_name
+  environment           = var.environment
+  vpc_id                = module.network.vpc_id
+  private_subnet_ids    = module.network.private_subnet_ids
+  rds_availability_zone = var.availability_zones[0]
 }
 
 # ── EKS 선행 IAM: 컨트롤플레인·노드그룹 역할 (클러스터 본체 붙기 전에 미리 준비) ──
