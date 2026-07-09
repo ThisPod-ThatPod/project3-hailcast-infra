@@ -27,12 +27,16 @@ module "data" {
   rds_availability_zone = var.availability_zones[0]
 }
 
-# ── EKS 선행 IAM: 컨트롤플레인·노드그룹 역할 (클러스터 본체 붙기 전에 미리 준비) ──
+# ── EKS: 컨트롤플레인 본체 + OIDC(IRSA 전제) + 선행 IAM 역할 ──
+# network 의 private 서브넷을 스레딩해 컨트롤플레인 ENI·노드를 배치한다.
+# cluster_version(1.35)·public_access_cidrs(0.0.0.0/0)는 모듈 기본값 사용.
+# 엔드포인트를 조이려면 public_access_cidrs = ["<내IP>/32"] 로 오버라이드.
 module "eks" {
   source = "../../modules/eks"
 
-  project_name = var.project_name
-  environment  = var.environment
+  project_name       = var.project_name
+  environment        = var.environment
+  private_subnet_ids = module.network.private_subnet_ids
 }
 
 # ── 스토리지: app 이미지용 ECR 레포(call-api·predict·weather-cron·worker) + S3 ──

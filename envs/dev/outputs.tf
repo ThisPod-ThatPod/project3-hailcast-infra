@@ -40,6 +40,27 @@ output "eks_node_iam_role_arn" {
   value       = module.eks.node_iam_role_arn
 }
 
+# ── EKS 클러스터 본체 (M1) — manifests·애드온·IRSA 계약(§7) ──
+output "eks_cluster_name" {
+  description = "EKS 클러스터 이름."
+  value       = module.eks.cluster_name
+}
+
+output "eks_cluster_endpoint" {
+  description = "EKS 클러스터 API 엔드포인트."
+  value       = module.eks.cluster_endpoint
+}
+
+output "eks_cluster_security_group_id" {
+  description = "EKS 자동생성 클러스터 SG ID(노드 SG·RDS ingress 참조)."
+  value       = module.eks.cluster_security_group_id
+}
+
+output "eks_oidc_provider_arn" {
+  description = "IAM OIDC provider ARN(IRSA 전제)."
+  value       = module.eks.oidc_provider_arn
+}
+
 # ── 스토리지 ──
 output "ecr_repository_urls" {
   description = "ECR 레포 이름→URL 맵(app CI push 대상 · manifests 이미지 경로)."
