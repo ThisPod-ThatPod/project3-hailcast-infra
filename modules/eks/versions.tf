@@ -5,5 +5,9 @@ terraform {
     aws = {
       source = "hashicorp/aws"
     }
+    # OIDC provider 의 지문 계산용(cicd 모듈과 동일 패턴).
+    tls = {
+      source = "hashicorp/tls"
+    }
   }
 }
