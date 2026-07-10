@@ -17,14 +17,17 @@ module "network" {
 
 # ── 데이터: RDS(PostgreSQL) + 자격증명(Secrets Manager) + DB 주소(Parameter Store) ──
 # network 출력을 스레딩해 RDS 를 프라이빗 서브넷에 배치한다. AZ 는 목록 첫째(Single-AZ 데모).
+# eks 노드 SG 를 받아 RDS 5432 인바운드를 그 SG 에서 온 것만 허용한다(§5-5).
+# 의존 방향은 network → eks → data 한 방향뿐이라 순환이 없다(eks 는 data 를 참조하지 않는다).
 module "data" {
   source = "../../modules/data"
 
-  project_name          = var.project_name
-  environment           = var.environment
-  vpc_id                = module.network.vpc_id
-  private_subnet_ids    = module.network.private_subnet_ids
-  rds_availability_zone = var.availability_zones[0]
+  project_name           = var.project_name
+  environment            = var.environment
+  vpc_id                 = module.network.vpc_id
+  private_subnet_ids     = module.network.private_subnet_ids
+  rds_availability_zone  = var.availability_zones[0]
+  node_security_group_id = module.eks.node_security_group_id
 }
 
 # ── EKS: 컨트롤플레인 본체 + OIDC(IRSA 전제) + 선행 IAM 역할 ──
