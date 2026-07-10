@@ -10,12 +10,22 @@
 # 인바운드 규칙 0개. 노드↔노드·컨트롤플레인 통신은 EKS 클러스터 SG(자동·self 허용)가 담당하고,
 # 이 SG 는 'RDS 가 지목할 대상(§5-5)'이자 향후 타깃 규칙의 앵커 역할만 한다.
 # (SG 는 '허용'만 하므로 zero-inbound 여도 클러스터 SG 의 노드간 허용을 막지 않는다.)
+#
+# ⚠️ karpenter.sh/discovery 태그가 없으면 앱이 DB 에 못 붙는다.
+#    RDS 는 5432 를 '이 SG 를 단 놈'에게만 연다(§5-5). 그런데 정작 DB 를 쓰는 파드
+#    (worker·call-api·predict)는 이 system 노드그룹이 아니라 Karpenter 가 띄우는 노드에 산다.
+#    Karpenter 는 EC2NodeClass 의 securityGroupSelectorTerms 로 SG 를 태그 검색해 노드에 붙이므로,
+#    이 태그가 빠지면 Karpenter 노드가 노드 SG 를 못 달고 → RDS 가 문을 안 열어준다.
+#    (에러 없이 연결 타임아웃만 나서 원인 찾기가 어렵다 — §6-1 "빠지면 몇 시간 디버깅")
 resource "aws_security_group" "node" {
   name        = "${local.name_prefix}-sg-eks-node"
   description = "EKS 노드/파드용. inbound 0(클러스터 SG가 노드간 통신 담당) · RDS 5432 ingress의 지목 대상"
   vpc_id      = var.vpc_id
 
-  tags = merge(var.tags, { Name = "${local.name_prefix}-sg-eks-node" })
+  tags = merge(var.tags, {
+    Name                     = "${local.name_prefix}-sg-eks-node"
+    "karpenter.sh/discovery" = local.name_prefix # = hailcast-dev (§6-1 · 서브넷 태그와 같은 값)
+  })
 }
 
 # egress 는 독립 리소스로(인라인/독립 혼용 금지 — data 모듈 RDS SG 와 동일 기조).
