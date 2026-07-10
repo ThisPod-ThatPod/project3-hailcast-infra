@@ -39,10 +39,15 @@ resource "aws_launch_template" "node" {
     aws_security_group.node.id,
   ]
 
-  # IMDSv2 강제(자격증명 탈취형 SSRF 차단). hop_limit=2 는 파드 IMDS 접근 여지를 남긴다.
+  # IMDSv2 강제(자격증명 탈취형 SSRF 차단) + hop_limit=1 로 '파드의 IMDS 접근'을 차단한다.
+  #   hop_limit=2 였다면 파드가 노드 IMDS 에 닿아 노드 역할(ECR-read·CNI·SSM)의 자격증명을
+  #   훔쳐 쓸 수 있다 = IRSA 로 좁혀둔 권한을 우회. 이 노드에 사는 플랫폼 파드
+  #   (Karpenter·ArgoCD·Prometheus)에도 그대로 적용된다.
+  #   1 로 낮춰도 안 깨지는 이유: IRSA 는 IMDS 가 아니라 OIDC 웹아이덴티티 토큰을 쓰고,
+  #   IMDS 가 실제로 필요한 CNI·kube-proxy 는 hostNetwork(노드 네트워크 네임스페이스)라 hop 1 로 닿는다.
   metadata_options {
     http_tokens                 = "required"
-    http_put_response_hop_limit = 2
+    http_put_response_hop_limit = 1
   }
 
   # 노드 루트 볼륨 암호화 — RDS(storage_encrypted)와 저장 암호화 일관성. gp3 암호화는 무비용.

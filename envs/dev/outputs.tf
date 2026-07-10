@@ -62,8 +62,13 @@ output "eks_oidc_provider_arn" {
 }
 
 output "eks_node_security_group_id" {
-  description = "전용 노드 SG ID(M4 RDS 5432 ingress 가 이 SG 를 지목)."
+  description = "전용 노드 SG ID(M4 RDS 5432 ingress 가 이 SG 를 지목 · Karpenter EC2NodeClass 가 태그로 발견)."
   value       = module.eks.node_security_group_id
+}
+
+output "eks_node_group_name" {
+  description = "system 관리형 노드그룹 이름(운영 조회·kubectl 대조용)."
+  value       = module.eks.node_group_name
 }
 
 # ── 스토리지 ──
