@@ -36,7 +36,9 @@ module "eks" {
 
   project_name       = var.project_name
   environment        = var.environment
+  vpc_id             = module.network.vpc_id
   private_subnet_ids = module.network.private_subnet_ids
+  # 노드그룹 규모(2× t3.large·min2/max3)는 모듈 기본값 사용.
 }
 
 # ── 스토리지: app 이미지용 ECR 레포(call-api·predict·weather-cron·worker) + S3 ──
