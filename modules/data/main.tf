@@ -41,15 +41,14 @@ resource "aws_secretsmanager_secret_version" "db_credentials" {
 }
 
 # ── RDS 보안그룹 ──
-# 규약서 §5-5: RDS SG 는 '5432 를 노드 SG 에서 온 것만' 허용해야 한다.
-# 그러나 노드 SG 는 eks 클러스터/노드그룹과 함께 아직 생성 전이라 지금은 대상이 없다.
-# → SG 는 zero-inbound(인바운드 규칙 0개)로 먼저 만들고, 5432 ingress 는
-#   노드 SG 가 생기는 PR 에서 aws_vpc_security_group_ingress_rule 로 추가한다.
+# 규약서 §5-5: RDS SG 는 '5432 를 노드 SG 에서 온 것만' 허용한다.
+# SG 자체는 zero-inbound 로 만들고, 5432 ingress 는 rds_ingress.tf(M4)에서
+# 노드 SG(eks 모듈 출력)를 지목해 추가한다.
 #
 # ⚠️ 규칙은 인라인 블록이 아니라 '독립 rule 리소스'로만 관리한다.
-#    인라인 egress 블록과 뒤 PR 의 독립 ingress 리소스를 섞으면 Terraform 이
-#    서로의 규칙을 매 apply 마다 지웠다 넣었다 하며 충돌한다(AWS provider 공식 경고).
-#    → 여기 egress 도 독립 리소스로 두어 뒤 PR 의 ingress 와 관리 방식을 통일한다.
+#    인라인 블록과 독립 rule 리소스를 섞으면 Terraform 이 서로의 규칙을
+#    매 apply 마다 지웠다 넣었다 하며 충돌한다(AWS provider 공식 경고).
+#    → egress·ingress 모두 독립 리소스로 두어 관리 방식을 통일한다.
 resource "aws_security_group" "rds" {
   name        = "${local.name_prefix}-sg-rds"
   description = "RDS(PostgreSQL) - 5432 inbound from node SG only (ingress는 노드 SG 생성 후 추가)"

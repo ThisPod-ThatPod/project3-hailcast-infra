@@ -42,6 +42,11 @@ variable "rds_availability_zone" {
   type        = string
 }
 
+variable "node_security_group_id" {
+  description = "EKS 노드 SG ID (eks 모듈 출력). RDS 5432 인바운드를 이 SG 에서 온 트래픽만 허용한다(§5-5)."
+  type        = string
+}
+
 variable "db_name" {
   description = "생성할 초기 데이터베이스 이름."
   type        = string
