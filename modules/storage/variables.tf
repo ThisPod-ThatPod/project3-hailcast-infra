@@ -17,7 +17,9 @@ variable "environment" {
 variable "repositories" {
   description = "ECR 레포로 만들 서비스 짧은 이름 목록. app 레포의 Dockerfile·manifests apps/ 와 1:1 로 맞춘다."
   type        = list(string)
-  default     = ["call-api", "predict", "weather-cron", "worker"]
+  # simulator: 시연 부하를 만드는 유일한 발원지(app 레포 simulator/Dockerfile) — 없으면 큐가 비어 스케일링 시연 불가.
+  # frontend : 화면 파일을 담은 nginx 정적 파드 이미지(S3 정적 호스팅 아님).
+  default = ["call-api", "predict", "weather-cron", "worker", "simulator", "frontend"]
 }
 
 # 보관할 태그 이미지 개수. 초과분은 오래된 것부터 자동 만료(비용 통제).
