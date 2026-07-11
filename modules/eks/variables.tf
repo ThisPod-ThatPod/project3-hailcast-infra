@@ -66,3 +66,77 @@ variable "node_max_size" {
   type        = number
   default     = 3
 }
+
+# ── IRSA(M3) 앱 5종이 지목할 데이터 리소스 ARN ────────────────────────────
+# 이 모듈은 S3·SQS·DynamoDB 를 '만들지' 않고 ARN 만 '받아쓴다'. storage·data 모듈의
+# output 을 envs/dev 가 여기로 스레딩한다(§4 — vpc_id 를 network 에서 받는 것과 같은 패턴).
+# 자식 모듈은 형제 모듈(module.storage)을 볼 수 없으므로, 값 전달은 루트를 거치는 이 방법뿐이다.
+
+variable "enable_app_irsa" {
+  description = <<-EOT
+    앱 IRSA 5종(predict·call-api·worker·keda·karpenter) 생성 스위치.
+    아래 ARN 3종(S3 · 콜 큐 · Karpenter 중단 큐)이 배선된 뒤 envs/dev 에서 true 로 켠다.
+    오답노트 DynamoDB 는 전제조건이 아니다 — 아래 validation 주석 참조.
+
+    ※ forecast 역할은 없다(§5-3 · 2026-07-13 폐기). 결정 1 = predict 내장이라
+      예측을 S3 에 쓰는 일을 predict 안의 스케줄러가 한다 → forecast-sa 를 달 파드가 없다.
+
+    ⚠️ ARN 이 null 인지로 자동 판단하지 않는 이유: storage·data 의 output 은 리소스가 아직
+       없는 첫 plan 에서 '미상(unknown)' 이다. 미상값에 `!= null` 을 걸면 결과도 미상이 되고,
+       그걸 for_each/count 조건에 쓰면 `Invalid for_each argument` 로 plan 자체가 죽는다.
+       그래서 판단 근거를 '값'이 아니라 plan 시점에 확정된 '리터럴 불리언'으로 둔다.
+  EOT
+  type        = bool
+  default     = false
+
+  # 플래그만 켜고 ARN 을 빠뜨리면 templatefile 이 "null 보간" 같은 알기 어려운 에러를 뱉는다.
+  # 여기서 미리 사람이 읽을 수 있는 말로 세워둔다. (교차 변수 참조는 Terraform 1.9+ 기능,
+  # 루트가 required_version >= 1.11 이라 안전하다.)
+  #
+  # ⭐ 강제하는 건 3종뿐이다. prediction_log_table_arn(오답노트)은 뺐다.
+  #    앞의 셋은 '없으면 앱이 실제로 죽는' 권한이다 — S3 없으면 모델 로드 실패, 콜 큐 없으면
+  #    call-api·worker 가 멈추고, 중단 큐 없으면 Karpenter 가 Spot 회수 경고를 못 받는다.
+  #    오답노트는 다르다. 규약서 §5-3 이 인정하듯 '쓰는 앱 코드가 아직 0건'이라 권한이 없어도
+  #    아무도 죽지 않는다. 그런데 이걸 함께 강제하면, 아무도 안 쓰는 테이블 하나가
+  #    'karpenter' 역할까지 인질로 잡는다(같은 스위치에 묶여 있으므로) → 노드 공급이 막힌다.
+  #    그래서 오답노트 권한은 irsa.tf 에서 dynamic 으로 두어 'ARN 이 오면 붙고 없으면 건너뛴다'.
+  validation {
+    condition = !var.enable_app_irsa || alltrue([
+      var.model_bucket_arn != null,
+      var.sqs_call_queue_arn != null,
+      var.karpenter_interruption_queue_arn != null,
+    ])
+    error_message = "enable_app_irsa = true 로 켜려면 ARN 3종(model_bucket_arn · sqs_call_queue_arn · karpenter_interruption_queue_arn)을 주입해야 합니다. (prediction_log_table_arn 은 선택 — 주입하면 predict 에 오답노트 쓰기 권한이 붙습니다.)"
+  }
+}
+
+variable "model_bucket_arn" {
+  description = "모델·예측 JSON 이 사는 S3 버킷 ARN (storage output). predict 가 읽기(models+predictions)와 쓰기(predictions 만)에 쓴다."
+  type        = string
+  default     = null
+}
+
+variable "sqs_call_queue_arn" {
+  description = "콜 큐 ARN (data output `sqs_queue_arn`, §7). call-api 송신 · worker 수신/삭제 · keda/predict 는 길이 조회만."
+  type        = string
+  default     = null
+}
+
+variable "prediction_log_table_arn" {
+  description = <<-EOT
+    예측 오답노트 DynamoDB 테이블 ARN (data output). predict 가 예측 실패를 기록(쓰기 전용).
+
+    ⭐ 선택 항목이다. null 이어도 enable_app_irsa 를 켤 수 있고, 그때는 오답노트 쓰기
+       statement 자체가 만들어지지 않는다(irsa.tf 의 dynamic). 앱에 이 테이블을 쓰는 코드가
+       아직 없기 때문이다(§5-3). data 모듈이 테이블을 만들면 루트에서 이 값을 넘기기만 하면
+       된다 — eks 모듈 코드는 고칠 게 없다.
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "karpenter_interruption_queue_arn" {
+  description = "Karpenter 중단 큐 ARN (data output). Spot 회수 2분 경고를 수신한다 — 없으면 중단 처리가 통째로 꺼진다(§5-4)."
+  type        = string
+  default     = null
+}
