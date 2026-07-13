@@ -50,3 +50,11 @@ output "node_group_name" {
   description = "system 관리형 노드그룹 이름."
   value       = aws_eks_node_group.system.node_group_name
 }
+
+# ── IRSA (M3) — manifests 의 serviceaccount.yaml 이 eks.amazonaws.com/role-arn 으로 참조하는 계약(§7) ──
+# 역할 키(lbctrl·monitoring…) → 역할 ARN 맵. 지금은 2종, ARN 접점이 풀리는 대로 6종이 채워진다.
+# manifests 는 이 맵에서 자기 키를 뽑아 SA 애노테이션에 박는다. 키 이름이 흔들리면 '권한 없음'으로 이어진다(§8).
+output "irsa_role_arns" {
+  description = "IRSA 역할 키 → 역할 ARN 맵. manifests SA 애노테이션(eks.amazonaws.com/role-arn)이 소비."
+  value       = { for key, role in aws_iam_role.irsa : key => role.arn }
+}

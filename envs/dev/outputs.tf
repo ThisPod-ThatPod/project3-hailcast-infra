@@ -71,6 +71,11 @@ output "eks_node_group_name" {
   value       = module.eks.node_group_name
 }
 
+output "eks_irsa_role_arns" {
+  description = "IRSA 역할 키→ARN 맵(§5-3). manifests SA 애노테이션이 참조. 현재 lbctrl·monitoring 2종, ARN 접점 해소 시 확장."
+  value       = module.eks.irsa_role_arns
+}
+
 # ── 스토리지 ──
 output "ecr_repository_urls" {
   description = "ECR 레포 이름→URL 맵(app CI push 대상 · manifests 이미지 경로)."
