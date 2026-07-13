@@ -87,3 +87,13 @@ output "github_actions_role_arn" {
   description = "GitHub Actions 워크플로가 assume 할 역할 ARN."
   value       = module.cicd.github_actions_role_arn
 }
+
+# ── S3 ──
+output "model_bucket_arn" {
+  description = "S3 모델 버킷 ARN (IRSA predict 가 소비)"
+  value       = module.storage.model_bucket_arn
+}
+output "model_bucket_name" {
+  description = "S3 모델 버킷 이름"
+  value       = module.storage.model_bucket_name
+}
