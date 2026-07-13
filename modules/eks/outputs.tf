@@ -52,7 +52,9 @@ output "node_group_name" {
 }
 
 # ── IRSA (M3) — manifests 의 serviceaccount.yaml 이 eks.amazonaws.com/role-arn 으로 참조하는 계약(§7) ──
-# 역할 키(lbctrl·monitoring…) → 역할 ARN 맵. 지금은 2종, ARN 접점이 풀리는 대로 6종이 채워진다.
+# 역할 키(lbctrl·monitoring·predict…) → 역할 ARN 맵.
+#   enable_app_irsa = false → 2종(lbctrl·monitoring)
+#   enable_app_irsa = true  → 7종 (규약서 §5-3 전체 · forecast 폐기로 8종 → 7종)
 # manifests 는 이 맵에서 자기 키를 뽑아 SA 애노테이션에 박는다. 키 이름이 흔들리면 '권한 없음'으로 이어진다(§8).
 output "irsa_role_arns" {
   description = "IRSA 역할 키 → 역할 ARN 맵. manifests SA 애노테이션(eks.amazonaws.com/role-arn)이 소비."
