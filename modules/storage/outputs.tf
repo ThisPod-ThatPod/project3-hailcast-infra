@@ -11,3 +11,13 @@ output "repository_arns" {
   description = "서비스 짧은 이름 → ECR repository ARN 매핑."
   value       = { for name, repo in aws_ecr_repository.this : name => repo.arn }
 }
+
+output "model_bucket_name" {
+  description = "모델·예측 JSON 저장 버킷 이름 (predict·CI 참조)"
+  value       = aws_s3_bucket.model_bucket.id
+}
+
+output "model_bucket_arn" {
+  description = "모델 버킷 ARN (IRSA 정책 참조)"
+  value       = aws_s3_bucket.model_bucket.arn
+}
