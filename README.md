@@ -143,7 +143,9 @@ VPC `10.0.0.0/16` · AZ `2a·2c` 기준.
 
 ### 5-4. 태그
 
-**자동 발견 태그(기능용):** `kubernetes.io/role/elb=1`(public) · `kubernetes.io/role/internal-elb=1`(private) · `karpenter.sh/discovery=hailcast-dev`(private) · `kubernetes.io/cluster/hailcast-dev-eks=shared`(private)
+**자동 발견 태그(기능용):** `kubernetes.io/role/elb=1`(public) · `kubernetes.io/role/internal-elb=1`(private) · `karpenter.sh/discovery=hailcast-dev`(**private 서브넷 + 노드 SG 둘 다**)
+
+> `kubernetes.io/cluster/hailcast-dev-eks=shared` 는 **폐기**했습니다(2026-07-14 · 레거시). EKS 1.19+ 는 이 태그를 붙이지 않고, 요구하는 건 AWS Load Balancer Controller **2.1.1 이하**뿐입니다. 근거는 규약서 §6-1.
 
 **공통 비용 태그(`default_tags`):** `Project=hailcast` · `Environment=dev` · `ManagedBy=terraform`
 
