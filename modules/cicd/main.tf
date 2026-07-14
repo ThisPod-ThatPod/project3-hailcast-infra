@@ -51,10 +51,20 @@ data "aws_iam_policy_document" "gha_assume" {
       values   = ["sts.amazonaws.com"]
     }
     # sub 를 특정 레포로 좁힌다. 다른 레포/포크는 이 역할을 못 맡는다.
+    #
+    # ⭐ 레포뿐 아니라 '브랜치' 까지 좁힌다. 옛 값은 `repo:<org>/<repo>:*` 였는데,
+    #    그 와일드카드는 PR 에서 도는 job(sub = ...:pull_request)까지 허용한다
+    #    → app 레포에 브랜치를 푸시할 수 있는 사람이 임의 이미지를 ECR 에 올릴 수 있고,
+    #      ArgoCD 는 그 태그를 그대로 배포한다.
+    #    앱 CI 는 main push 와 workflow_dispatch 로만 돈다(app .github/workflows/build.yml:5-7)
+    #    → 아래 두 ref 로 충분하다.
     condition {
-      test     = "StringLike"
+      test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_org}/${var.github_repo}:*"]
+      values = [
+        "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/main",
+        "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/dev",
+      ]
     }
   }
 }

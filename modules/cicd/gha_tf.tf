@@ -39,13 +39,20 @@ data "aws_iam_policy_document" "tf_plan_assume" {
       values   = ["sts.amazonaws.com"]
     }
     # ⚠️ sub 를 좁히지 않으면 '이 org 의 아무 레포나' 이 역할을 맡는다.
+    #
+    # ⭐ 'pull_request' 하나만 허용한다. 'ref:refs/heads/dev' 를 넣지 마라.
+    #    pull_request_target 이벤트는 base 브랜치 컨텍스트에서 돌면서 id-token 을 받는데,
+    #    그때 sub 가 'ref:refs/heads/dev' 가 된다. 그 값을 허용해 두면
+    #    "포크 PR 에서도 plan 이 돌게 하려고" pull_request_target 을 쓰는 순간
+    #    외부인이 이 역할 안에서 코드를 실행하게 된다.
+    #    → ReadOnlyAccess 의 s3:GetObject 로 tfstate 를 읽으면 RDS 비번이 평문으로 나온다.
+    #    dev push 에서 plan 을 돌릴 이유도 없다(머지 뒤엔 apply 워크플로가 돈다).
+    #
+    #    ⚠️ 워크플로에 pull_request_target 을 쓰지 마라. pull_request 만 쓴다.
     condition {
-      test     = "StringLike"
+      test     = "StringEquals" # 와일드카드가 없으므로 StringLike 일 이유가 없다
       variable = "token.actions.githubusercontent.com:sub"
-      values = [
-        "repo:${var.github_org}/${var.infra_repo}:pull_request",
-        "repo:${var.github_org}/${var.infra_repo}:ref:refs/heads/dev",
-      ]
+      values   = ["repo:${var.github_org}/${var.infra_repo}:pull_request"]
     }
   }
 }
@@ -135,6 +142,20 @@ data "aws_iam_policy_document" "tf_apply_assume" {
       variable = "token.actions.githubusercontent.com:sub"
       values   = ["repo:${var.github_org}/${var.infra_repo}:environment:${var.apply_environment}"]
     }
+
+    # ⭐ sub 만으로는 부족하다 — environment sub 에는 '어느 브랜치·어느 워크플로' 정보가 없다.
+    #    sub 가 잠그는 건 "누군가 이 environment 배포를 승인했다" 까지다.
+    #    그래서 아무 브랜치에서나 apply job 을 만들어 승인만 받으면 이 역할을 맡을 수 있다.
+    #    (리뷰어는 코드가 아니라 '배포 승인' 버튼을 본다 — 승인을 건너뛸 필요조차 없다.)
+    #
+    #    job_workflow_ref 클레임은 '<org>/<repo>/.github/workflows/<파일>@<ref>' 형식이라
+    #    워크플로 파일과 브랜치가 둘 다 들어 있다 → 여기서 못 박는다.
+    #    ⚠️ 이 값이 실제 워크플로 경로·브랜치와 다르면 apply 가 AssumeRole 단계에서 거부된다.
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:job_workflow_ref"
+      values   = ["${var.github_org}/${var.infra_repo}/.github/workflows/${var.apply_workflow_file}@refs/heads/${var.apply_branch}"]
+    }
   }
 }
 
@@ -142,15 +163,31 @@ resource "aws_iam_role" "tf_apply" {
   name               = local.tf_apply_role_name
   description        = "GitHub Actions - terraform apply. '${var.apply_environment}' environment 승인 후에만 assume 가능."
   assume_role_policy = data.aws_iam_policy_document.tf_apply_assume.json
-  tags               = merge(var.tags, { Name = local.tf_apply_role_name })
+
+  # 기본값은 1시간이다. 콜드 apply(VPC+NAT+EKS+노드그룹+RDS)는 그걸 넘길 수 있다.
+  # GitHub Actions 는 세션을 갱신하지 않으므로, 만료되면 apply 가 중간에 ExpiredToken 으로 끊긴다
+  # → 리소스가 절반만 만들어지고 tfstate 잠금이 남는다.
+  max_session_duration = 21600 # 6시간
+
+  tags = merge(var.tags, { Name = local.tf_apply_role_name })
 }
 
 # ── apply 권한 ─────────────────────────────────────────────
 # terraform 이 만드는 것 전부에 권한이 필요하다. Resource 를 좁힐 수 없다 —
 # 아직 존재하지 않는 리소스의 ARN 을 미리 알 수 없기 때문이다.
-# AdministratorAccess 를 붙이지 않고 '쓰는 서비스만' 명시한다. 두 가지가 남는다:
-#   ① 무엇을 쓰는지가 코드에 드러난다(나중에 좁히기 쉽다)
-#   ② 조직·결제·계정 설정에는 손을 못 댄다
+#
+# ⚠️ 정직하게 — 이 역할은 '사실상 계정 관리자' 다. AdministratorAccess 를 안 붙였을 뿐이다.
+#    iam:* 가 열려 있으므로, 이 역할을 탈취하면 아래처럼 유저 없이도 영속 백도어를 만들 수 있다:
+#      - 외부 계정을 신뢰하는 역할을 새로 만들고 AdministratorAccess 를 붙인다
+#      - 또는 이 역할 자신의 신뢰정책(AssumeRolePolicy)에 공격자 계정을 끼워 넣는다
+#    아래 DenyIamUserPersistence 는 '유저 + 장기 액세스 키' 경로만 막는다. 역할 경로는 못 막는다.
+#    (permissions boundary 로 막을 수 있으나, terraform 이 만드는 IRSA 역할 8종에 전부
+#     boundary 를 강제해야 해서 지금 규모엔 과하다. 남겨 두는 개선점이다.)
+#
+# 그래서 진짜 방어선은 IAM 이 아니라 **신뢰정책이다** — 위 tf_apply_assume 의
+# environment + job_workflow_ref 조건이 '누가 이 역할을 맡을 수 있느냐' 를 잠근다.
+#
+# 서비스를 명시하는 값어치는 남는다: 무엇을 쓰는지가 코드에 드러나고, 리전이 잠긴다.
 data "aws_iam_policy_document" "tf_apply" {
   statement {
     sid    = "TerraformManagedServices"
@@ -177,6 +214,15 @@ data "aws_iam_policy_document" "tf_apply" {
       "sts:GetCallerIdentity",
     ]
     resources = ["*"]
+
+    # ⭐ 리전을 잠근다. 탈취당해도 다른 리전에 인스턴스를 띄울 수 없다.
+    #    us-east-1 은 빼면 안 된다 — IAM·S3 같은 글로벌 서비스 호출이 그쪽으로 가고,
+    #    §5-7 의 CloudFront ACM 인증서도 us-east-1 에만 만들 수 있다.
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = ["ap-northeast-2", "us-east-1"]
+    }
   }
 
   # ⚠️ IAM '유저' 관련은 명시적으로 막는다.

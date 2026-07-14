@@ -61,6 +61,24 @@ variable "tfstate_key" {
   default     = "dev/terraform.tfstate"
 }
 
+variable "apply_workflow_file" {
+  description = <<-EOT
+    apply 를 실행하는 워크플로 파일명(.github/workflows/ 아래).
+    신뢰정책의 job_workflow_ref 조건에 박힌다 — environment sub 만으로는 '어느 브랜치·어느
+    워크플로' 인지 구분되지 않아서, 아무 브랜치에서 apply job 을 만들어 승인만 받으면
+    역할을 맡을 수 있게 된다. 그 구멍을 이 조건이 막는다.
+    ⚠️ 실제 파일명과 다르면 apply 가 AssumeRole 단계에서 거부된다.
+  EOT
+  type        = string
+  default     = "terraform.yml"
+}
+
+variable "apply_branch" {
+  description = "apply 워크플로가 도는 브랜치. job_workflow_ref 조건에 박힌다(refs/heads/<이 값>)."
+  type        = string
+  default     = "dev"
+}
+
 variable "apply_environment" {
   description = <<-EOT
     apply 역할을 맡을 수 있는 GitHub environment 이름.
