@@ -42,3 +42,19 @@ output "sqs_queue_name" {
   description = "콜 큐 이름(hailcast-dev-call-queue). 앱이 큐 이름만 받는 경우의 참조값."
   value       = aws_sqs_queue.call.name
 }
+
+# ── SQS Karpenter 중단 큐 (§7 모듈 output 계약) ────────────
+
+output "karpenter_queue_arn" {
+  description = "Karpenter 중단 큐 ARN. eks 모듈의 IRSA karpenter 정책이 Resource 로 지목한다(§7-1)."
+  value       = aws_sqs_queue.karpenter.arn
+}
+
+output "karpenter_queue_name" {
+  description = <<-EOT
+    Karpenter 중단 큐 이름(hailcast-dev). 배포팀이 Helm values 의
+    settings.interruptionQueue 에 '반드시' 넘겨야 하는 값이다(§8 계약).
+    안 넘기면 기본값이 빈 문자열이라 중단 처리 컨트롤러가 아예 등록되지 않는다.
+  EOT
+  value       = aws_sqs_queue.karpenter.name
+}

@@ -47,6 +47,17 @@ output "sqs_queue_name" {
   value       = module.data.sqs_queue_name
 }
 
+# ── SQS Karpenter 중단 큐 ──
+output "karpenter_queue_arn" {
+  description = "Karpenter 중단 큐 ARN. eks 모듈 IRSA karpenter 정책이 지목(§7-1)."
+  value       = module.data.karpenter_queue_arn
+}
+
+output "karpenter_queue_name" {
+  description = "Karpenter 중단 큐 이름(hailcast-dev). 배포팀 Helm: settings.interruptionQueue(§8)."
+  value       = module.data.karpenter_queue_name
+}
+
 # ── EKS 선행 IAM (클러스터 생성 시 주입) ──
 output "eks_cluster_iam_role_arn" {
   description = "EKS 컨트롤플레인 역할 ARN."
