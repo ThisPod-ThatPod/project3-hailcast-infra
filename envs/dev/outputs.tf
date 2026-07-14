@@ -29,6 +29,24 @@ output "rds_endpoint" {
   value       = module.data.rds_endpoint
 }
 
+# ── SQS 콜 큐 ──
+# 배포팀이 ConfigMap·ScaledObject 에 넣을 값이라 루트에서 꺼내 쓸 수 있게 노출한다.
+#   terraform output -raw sqs_queue_url
+output "sqs_queue_arn" {
+  description = "콜 큐 ARN. eks 모듈 IRSA 정책이 Resource 로 지목(§7-1)."
+  value       = module.data.sqs_queue_arn
+}
+
+output "sqs_queue_url" {
+  description = "콜 큐 URL. 배포팀 ConfigMap(SQS_QUEUE_URL) · KEDA ScaledObject 의 queueURL."
+  value       = module.data.sqs_queue_url
+}
+
+output "sqs_queue_name" {
+  description = "콜 큐 이름(hailcast-dev-call-queue)."
+  value       = module.data.sqs_queue_name
+}
+
 # ── EKS 선행 IAM (클러스터 생성 시 주입) ──
 output "eks_cluster_iam_role_arn" {
   description = "EKS 컨트롤플레인 역할 ARN."
