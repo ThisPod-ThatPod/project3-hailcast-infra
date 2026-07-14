@@ -74,9 +74,23 @@ variable "node_max_size" {
 
 variable "enable_app_irsa" {
   description = <<-EOT
-    앱 IRSA 5종(predict·call-api·worker·keda·karpenter) 생성 스위치.
+    앱 IRSA 6종(predict·call-api·worker·weather-cron·keda·karpenter) 생성 스위치.
+    상시 2종(lbctrl·monitoring)과 합쳐 IRSA 는 총 8종이다(§5-3).
     아래 ARN 3종(S3 · 콜 큐 · Karpenter 중단 큐)이 배선된 뒤 envs/dev 에서 true 로 켠다.
     오답노트 DynamoDB 는 전제조건이 아니다 — 아래 validation 주석 참조.
+
+    ※ weather-cron 은 2026-07-14 신설이다. 앱이 DB 를 빼고 S3 를 유일한 진실원천으로
+      재설계하면서(app common/core/store.py:2) 날씨 CSV 도 S3 를 지나가게 됐다.
+      이 역할이 없으면 CSV 가 안 올라가고 predict 가 못 읽어 예측이 통째로 안 된다.
+
+    ※ simulator 는 IRSA 를 만들지 않는다. 부하는 call-api 를 HTTP 로 때려서 넣고, SQS 는
+      직접 만지지 않는다(app simulator 에 SqsAdapter·send_message 사용 0건 · 실측).
+      ⚠️ 다만 'AWS 를 전혀 안 만진다' 는 아니다 — JSON_STORE_BACKEND=s3 로 뜨면 2초마다
+         simulator/status.json 을 S3 에 쓴다(app simulator/schedulers/status_scheduler.py:26 ·
+         config.py:23). 앱팀 의도는 '로컬 전용' 이고(app common/core/constants.py:50-53),
+         K8s 에 띄우더라도 JSON_STORE_BACKEND=local 이면 IRSA 가 필요 없다.
+         → 파드로 띄우면서 s3 백엔드를 쓰기로 하면 irsa-simulator 를 신설해야 한다(IRSA 9종).
+           앱팀 답변 대기 중이다.
 
     ※ forecast 역할은 없다(§5-3 · 2026-07-13 폐기). 결정 1 = predict 내장이라
       예측을 S3 에 쓰는 일을 predict 안의 스케줄러가 한다 → forecast-sa 를 달 파드가 없다.
@@ -111,7 +125,12 @@ variable "enable_app_irsa" {
 }
 
 variable "model_bucket_arn" {
-  description = "모델·예측 JSON 이 사는 S3 버킷 ARN (storage output). predict 가 읽기(models+predictions)와 쓰기(predictions 만)에 쓴다."
+  description = <<-EOT
+    앱의 유일한 상태 저장소인 S3 버킷 ARN (storage output).
+    이름은 '모델' 버킷이지만 앱이 DB 를 빼면서(app common/core/store.py:2) 콜 기록·트래픽 집계·
+    스케일 이력·대시보드·날씨 CSV 까지 전부 이 버킷 하나를 지나간다.
+    IRSA 4종(predict·call-api·worker·weather-cron)이 프리픽스별로 잘라 쓴다 — 표는 irsa.tf 참조.
+  EOT
   type        = string
   default     = null
 }
