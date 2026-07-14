@@ -42,6 +42,24 @@ module "eks" {
   vpc_id             = module.network.vpc_id
   private_subnet_ids = module.network.private_subnet_ids
   # 노드그룹 규모(2× t3.large·min2/max3)는 모듈 기본값 사용.
+
+  # ── IRSA 앱 5종 배선 (predict · call-api · worker · keda · karpenter) ──
+  # 자식 모듈은 형제 모듈을 볼 수 없다(module.storage 를 modules/eks 안에서 못 쓴다).
+  # 그래서 '루트가 output 을 읽어 다음 모듈의 변수로 넘기는' 이 중계가 유일한 방법이다(§4).
+  #
+  # ⚠️ enable_app_irsa 는 ARN 이 null 인지로 자동 판단하지 않는다.
+  #    storage·data 의 output 은 첫 plan 에서 '미상(unknown)' 이라, 미상값에 조건을 걸어
+  #    for_each 에 쓰면 `Invalid for_each argument` 로 plan 자체가 죽는다.
+  #    판단 근거를 plan 시점에 확정되는 '리터럴 불리언' 으로 둔 이유다.
+  enable_app_irsa                  = true
+  model_bucket_arn                 = module.storage.model_bucket_arn # storage → eks
+  sqs_call_queue_arn               = module.data.sqs_queue_arn       # data    → eks
+  karpenter_interruption_queue_arn = module.data.karpenter_queue_arn # data    → eks
+
+  # 오답노트 DynamoDB 는 전제조건이 아니다(앱 미구현 · 스키마 미확정).
+  # null 이면 IRSA predict 의 DynamoDB 문(statement)만 빠지고 나머지는 그대로 만들어진다
+  # (modules/eks/irsa.tf 의 dynamic 블록). 테이블이 생기면 이 줄만 이어 붙인다.
+  # prediction_log_table_arn = module.data.prediction_log_table_arn
 }
 
 # ── 스토리지: app 이미지용 ECR 레포(call-api·predict·weather-cron·worker) + S3 ──
