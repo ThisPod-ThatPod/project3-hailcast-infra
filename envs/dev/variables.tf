@@ -46,3 +46,17 @@ variable "private_subnet_cidrs" {
   type        = list(string)
   default     = ["10.0.32.0/20", "10.0.48.0/20"]
 }
+
+# ── 클러스터 출입 명단 (eks 모듈 access.tf 로 넘어간다) ──────────────────
+# ⚠️ 실제 ARN 은 terraform.tfvars(gitignore)에만. 이 레포는 퍼블릭이다.
+variable "cluster_admin_principal_arns" {
+  description = "클러스터 전권을 줄 IAM principal ARN 목록. ⚠️ apply 주체는 넣지 마라(자동 등재 → 중복 시 apply 실패)."
+  type        = list(string)
+  default     = []
+}
+
+variable "cluster_editor_principal_arns" {
+  description = "앱 네임스페이스 안에서만 편집 권한을 줄 IAM principal ARN 목록."
+  type        = list(string)
+  default     = []
+}
