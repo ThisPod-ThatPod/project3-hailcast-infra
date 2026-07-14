@@ -5,5 +5,10 @@
 modules/**/.terraform.lock.hcl
 *.tfvars
 !*.tfvars.example
+
+# ⚠️ plan 파일에는 값이 '평문' 으로 들어간다(sensitive 표시가 붙어도 파일 안엔 그대로다).
+#    커밋하면 퍼블릭 레포에 시크릿을 올리는 것이다. CI 도 -out 을 쓰지 않는다.
+tfplan
+*.tfplan
 crash.log
 override.tf
