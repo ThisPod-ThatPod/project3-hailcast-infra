@@ -65,10 +65,9 @@ module "eks" {
   sqs_call_queue_arn               = module.data.sqs_queue_arn       # data    → eks
   karpenter_interruption_queue_arn = module.data.karpenter_queue_arn # data    → eks
 
-  # 오답노트 DynamoDB 는 전제조건이 아니다(앱 미구현 · 스키마 미확정).
-  # null 이면 IRSA predict 의 DynamoDB 문(statement)만 빠지고 나머지는 그대로 만들어진다
-  # (modules/eks/irsa.tf 의 dynamic 블록). 테이블이 생기면 이 줄만 이어 붙인다.
-  # prediction_log_table_arn = module.data.prediction_log_table_arn
+  # 오답노트 DynamoDB(predict 쓰기) · RDS 자동생성 시크릿(eso 읽기) 배선.
+  prediction_log_table_arn = module.data.prediction_log_table_arn
+  rds_master_secret_arn    = module.data.rds_master_secret_arn
 }
 
 # ── 스토리지: app 이미지용 ECR 레포(call-api·predict·weather-cron·worker) + S3 ──

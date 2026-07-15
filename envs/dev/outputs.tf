@@ -19,9 +19,9 @@ output "private_subnet_ids" {
 }
 
 # ── 데이터 ──
-output "db_credentials_secret_arn" {
-  description = "RDS 자격증명 시크릿 ARN(RDS·IRSA 가 이 ARN 으로 참조)."
-  value       = module.data.db_credentials_secret_arn
+output "rds_master_secret_arn" {
+  description = "RDS 자동생성 마스터 비번 시크릿 ARN(IRSA eso 가 이 ARN 으로 참조)."
+  value       = module.data.rds_master_secret_arn
 }
 
 output "rds_endpoint" {

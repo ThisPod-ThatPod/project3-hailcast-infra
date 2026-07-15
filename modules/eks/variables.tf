@@ -74,23 +74,18 @@ variable "node_max_size" {
 
 variable "enable_app_irsa" {
   description = <<-EOT
-    앱 IRSA 6종(predict·call-api·worker·weather-cron·keda·karpenter) 생성 스위치.
-    상시 2종(lbctrl·monitoring)과 합쳐 IRSA 는 총 8종이다(§5-3).
-    아래 ARN 3종(S3 · 콜 큐 · Karpenter 중단 큐)이 배선된 뒤 envs/dev 에서 true 로 켠다.
+    앱 IRSA 8종(predict·call-api·worker·weather-cron·keda·karpenter·simulator·eso) 생성 스위치.
+    상시 2종(lbctrl·monitoring)과 합쳐 IRSA 는 총 10종이다(§5-3).
+    아래 ARN 4종(S3 · 콜 큐 · Karpenter 중단 큐 · RDS 시크릿)이 배선된 뒤 envs/dev 에서 true 로 켠다.
     오답노트 DynamoDB 는 전제조건이 아니다 — 아래 validation 주석 참조.
 
     ※ weather-cron 은 2026-07-14 신설이다. 앱이 DB 를 빼고 S3 를 유일한 진실원천으로
       재설계하면서(app common/core/store.py:2) 날씨 CSV 도 S3 를 지나가게 됐다.
       이 역할이 없으면 CSV 가 안 올라가고 predict 가 못 읽어 예측이 통째로 안 된다.
 
-    ※ simulator 는 IRSA 를 만들지 않는다. 부하는 call-api 를 HTTP 로 때려서 넣고, SQS 는
-      직접 만지지 않는다(app simulator 에 SqsAdapter·send_message 사용 0건 · 실측).
-      ⚠️ 다만 'AWS 를 전혀 안 만진다' 는 아니다 — JSON_STORE_BACKEND=s3 로 뜨면 2초마다
-         simulator/status.json 을 S3 에 쓴다(app simulator/schedulers/status_scheduler.py:26 ·
-         config.py:23). 앱팀 의도는 '로컬 전용' 이고(app common/core/constants.py:50-53),
-         K8s 에 띄우더라도 JSON_STORE_BACKEND=local 이면 IRSA 가 필요 없다.
-         → 파드로 띄우면서 s3 백엔드를 쓰기로 하면 irsa-simulator 를 신설해야 한다(IRSA 9종).
-           앱팀 답변 대기 중이다.
+    ※ simulator 는 K8s 에 s3 백엔드로 뜬다(팀 결정). JSON_STORE_BACKEND=s3 라 2초마다
+      simulator/status.json 을 S3 에 쓴다. irsa-simulator 가 simulator/ 쓰기를 갖고,
+      predict 는 그 파일을 읽으려 simulator/ 읽기를 갖는다(§5-3).
 
     ※ forecast 역할은 없다(§5-3 · 2026-07-13 폐기). 결정 1 = predict 내장이라
       예측을 S3 에 쓰는 일을 predict 안의 스케줄러가 한다 → forecast-sa 를 달 파드가 없다.
@@ -107,9 +102,10 @@ variable "enable_app_irsa" {
   # 여기서 미리 사람이 읽을 수 있는 말로 세워둔다. (교차 변수 참조는 Terraform 1.9+ 기능,
   # 루트가 required_version >= 1.11 이라 안전하다.)
   #
-  # ⭐ 강제하는 건 3종뿐이다. prediction_log_table_arn(오답노트)은 뺐다.
-  #    앞의 셋은 '없으면 앱이 실제로 죽는' 권한이다 — S3 없으면 모델 로드 실패, 콜 큐 없으면
-  #    call-api·worker 가 멈추고, 중단 큐 없으면 Karpenter 가 Spot 회수 경고를 못 받는다.
+  # 강제하는 건 4종이다. prediction_log_table_arn(오답노트)은 뺐다.
+  #    넷 다 '없으면 앱이 실제로 죽는' 권한이다 — S3 없으면 모델 로드 실패, 콜 큐 없으면
+  #    call-api·worker 가 멈추고, 중단 큐 없으면 Karpenter 가 Spot 경고를 못 받고,
+  #    RDS 시크릿 없으면 eso 가 비번을 못 읽어 DB 접속이 통째로 막힌다.
   #    오답노트는 다르다. 규약서 §5-3 이 인정하듯 '쓰는 앱 코드가 아직 0건'이라 권한이 없어도
   #    아무도 죽지 않는다. 그런데 이걸 함께 강제하면, 아무도 안 쓰는 테이블 하나가
   #    'karpenter' 역할까지 인질로 잡는다(같은 스위치에 묶여 있으므로) → 노드 공급이 막힌다.
@@ -119,8 +115,9 @@ variable "enable_app_irsa" {
       var.model_bucket_arn != null,
       var.sqs_call_queue_arn != null,
       var.karpenter_interruption_queue_arn != null,
+      var.rds_master_secret_arn != null,
     ])
-    error_message = "enable_app_irsa = true 로 켜려면 ARN 3종(model_bucket_arn · sqs_call_queue_arn · karpenter_interruption_queue_arn)을 주입해야 합니다. (prediction_log_table_arn 은 선택 — 주입하면 predict 에 오답노트 쓰기 권한이 붙습니다.)"
+    error_message = "enable_app_irsa = true 로 켜려면 ARN 4종(model_bucket_arn · sqs_call_queue_arn · karpenter_interruption_queue_arn · rds_master_secret_arn)을 주입해야 합니다. (prediction_log_table_arn 은 선택 — 주입하면 predict 에 오답노트 쓰기 권한이 붙습니다.)"
   }
 }
 
@@ -150,6 +147,12 @@ variable "prediction_log_table_arn" {
        아직 없기 때문이다(§5-3). data 모듈이 테이블을 만들면 루트에서 이 값을 넘기기만 하면
        된다 — eks 모듈 코드는 고칠 게 없다.
   EOT
+  type        = string
+  default     = null
+}
+
+variable "rds_master_secret_arn" {
+  description = "RDS 자동생성 마스터 비번 시크릿 ARN (data output). eso IRSA 가 GetSecretValue 로 읽어 K8s Secret 으로 동기화한다(§5-4)."
   type        = string
   default     = null
 }

@@ -17,3 +17,8 @@ output "arn" {
   description = "RDS 인스턴스 ARN. IAM 정책·모니터링 참조용."
   value       = aws_db_instance.primary.arn
 }
+
+output "master_secret_arn" {
+  description = "RDS 가 자동 생성·관리하는 마스터 비번 시크릿 ARN. eks IRSA eso 가 GetSecretValue 로 읽는다(§5-4)."
+  value       = aws_db_instance.primary.master_user_secret[0].secret_arn
+}
