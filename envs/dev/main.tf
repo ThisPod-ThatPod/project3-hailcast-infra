@@ -43,7 +43,16 @@ module "eks" {
   private_subnet_ids = module.network.private_subnet_ids
   # 노드그룹 규모(2× t3.large·min2/max3)는 모듈 기본값 사용.
 
-  # ── IRSA 앱 5종 배선 (predict · call-api · worker · keda · karpenter) ──
+  # ── 클러스터 출입 명단 (access.tf) — 사람이 kubectl 을 쓰려면 여기 올라야 한다 ──
+  # 값은 terraform.tfvars(gitignore)에 있다 — ARN 에 계정 ID 가 들어가고 이 레포는 퍼블릭이다.
+  # admin  = 클러스터 전권 (애드온 설치)  ·  editor = hailcast 네임스페이스 편집만 (디버깅)
+  #
+  # ⚠️ 첫 apply 를 사람이 로컬에서 하므로 그 사람은 bootstrap 으로 자동 등재된다.
+  #    목록에 또 넣으면 중복 엔트리가 되어 apply 가 실패한다.
+  cluster_admin_principal_arns  = var.cluster_admin_principal_arns
+  cluster_editor_principal_arns = var.cluster_editor_principal_arns
+
+  # ── IRSA 앱 6종 배선 (predict · call-api · worker · weather-cron · keda · karpenter) ──
   # 자식 모듈은 형제 모듈을 볼 수 없다(module.storage 를 modules/eks 안에서 못 쓴다).
   # 그래서 '루트가 output 을 읽어 다음 모듈의 변수로 넘기는' 이 중계가 유일한 방법이다(§4).
   #

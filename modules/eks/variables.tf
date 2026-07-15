@@ -159,3 +159,34 @@ variable "karpenter_interruption_queue_arn" {
   type        = string
   default     = null
 }
+
+# ── 클러스터 출입 명단 (access.tf) ────────────────────────────────────────
+# ⚠️ ARN 에는 계정 ID 가 들어간다. 이 레포는 퍼블릭이다 → 실제 값은 terraform.tfvars(gitignore)에만.
+
+variable "cluster_admin_principal_arns" {
+  description = <<-EOT
+    클러스터 전권(cluster-admin)을 줄 IAM principal ARN 목록.
+    애드온(ArgoCD·KEDA·Karpenter·ALB Controller)을 클러스터 전역에 설치해야 하는 사람.
+
+    ⚠️ apply 를 실행하는 principal 은 넣지 마라 — bootstrap 으로 자동 등재되므로
+       중복 엔트리가 되어 apply 가 실패한다.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "cluster_editor_principal_arns" {
+  description = <<-EOT
+    앱 네임스페이스 안에서만 편집 권한(AmazonEKSEditPolicy)을 줄 IAM principal ARN 목록.
+    파드 로그·재시작·exec 은 되지만 클러스터 전역 리소스(노드·CRD·다른 네임스페이스)는 못 건드린다.
+    나중에 전권이 필요해지면 tfvars 에서 admin 목록으로 옮긴다(코드는 안 고친다).
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "editor_namespaces" {
+  description = "editor 권한이 미치는 네임스페이스(§8 앱 네임스페이스)."
+  type        = list(string)
+  default     = ["hailcast"]
+}
