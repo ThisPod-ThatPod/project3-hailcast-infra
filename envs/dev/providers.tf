@@ -13,3 +13,19 @@ provider "aws" {
     }
   }
 }
+
+# CloudFront 용 ACM 인증서는 us-east-1(버지니아)에서만 발급된다. CloudFront 만의 예외다.
+# 그래서 두 번째 aws provider 를 alias 로 단다. edge 모듈이 이걸 주입받아 쓴다.
+provider "aws" {
+  alias  = "virginia"
+  region = "us-east-1"
+
+  # alias provider 는 default_tags 를 물려받지 않는다. 여기도 똑같이 달아야 태그가 붙는다.
+  default_tags {
+    tags = {
+      Project     = var.project_name
+      Environment = var.environment
+      ManagedBy   = "terraform"
+    }
+  }
+}

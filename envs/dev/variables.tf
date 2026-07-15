@@ -60,3 +60,24 @@ variable "cluster_editor_principal_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "enable_edge" {
+  description = <<-EOT
+    엣지(Route53·CloudFront·ACM) 생성 스위치.
+    기본 false — 도메인이 준비되기 전에는 켜지 않는다. 켜도 alb_dns_name 이 비면 인증서만 만든다.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "domain_name" {
+  description = "루트 도메인. 예: myminiinfra.store. enable_edge = true 일 때 필수"
+  type        = string
+  default     = ""
+}
+
+variable "alb_dns_name" {
+  description = "배포팀 Ingress 가 만든 ALB DNS. 비면 CloudFront 를 만들지 않는다"
+  type        = string
+  default     = ""
+}
