@@ -70,10 +70,22 @@ module "storage" {
   environment  = var.environment
 }
 
-# ── CI/CD: GitHub Actions OIDC + ECR push 역할 ──
+# ── CI/CD: GitHub Actions OIDC + 역할 3종 ──
+#   gha-ecr        : app 레포 → ECR 이미지 push (최소권한)
+#   gha-tf-plan    : infra 레포 → terraform plan (읽기 전용). PR 마다 자동
+#   gha-tf-apply   : infra 레포 → terraform apply (넓은 권한). environment 승인 후에만
+#
+# ⚠️ plan 과 apply 를 한 역할로 합치면, PR 이 열릴 때마다 관리자 자격증명이 CI 에서 돈다.
+#    terraform plan 은 임의 코드를 실행할 수 있고 이 레포는 PUBLIC 이다. 그래서 나눈다.
 module "cicd" {
   source = "../../modules/cicd"
 
   project_name = var.project_name
   environment  = var.environment
+
+  # plan 역할이 tfstate 잠금 파일(<key>.tflock)을 쓰고 지울 수 있어야 한다(use_lockfile=true).
+  # ⚠️ 둘 다 backend.tf 와 반드시 같은 값이다. 어긋나면 plan 이 잠금을 못 걸어 죽는다.
+  #    (backend 블록은 변수를 못 받아서 값을 두 곳에 적을 수밖에 없다.)
+  tfstate_bucket = "hailcast-dev-tfstate-7dde"
+  tfstate_key    = "dev/terraform.tfstate"
 }

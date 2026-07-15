@@ -113,8 +113,18 @@ output "ecr_repository_urls" {
 
 # ── CI/CD ──
 output "github_actions_role_arn" {
-  description = "GitHub Actions 워크플로가 assume 할 역할 ARN."
+  description = "app 레포 CI 가 assume 할 ECR push 역할 ARN(gha-ecr)."
   value       = module.cicd.github_actions_role_arn
+}
+
+output "gha_tf_plan_role_arn" {
+  description = "terraform plan 전용(읽기) 역할 ARN. 워크플로 plan job 의 role-to-assume."
+  value       = module.cicd.gha_tf_plan_role_arn
+}
+
+output "gha_tf_apply_role_arn" {
+  description = "terraform apply 역할 ARN. GitHub environment 'infra-apply' 승인 후에만 assume 된다."
+  value       = module.cicd.gha_tf_apply_role_arn
 }
 
 # ── S3 ──
