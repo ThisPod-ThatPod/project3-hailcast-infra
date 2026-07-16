@@ -43,8 +43,10 @@ locals {
     "call-api"     = "hailcast:call-api-sa"
     worker         = "hailcast:worker-sa"
     "weather-cron" = "hailcast:weather-cron-sa"
-    keda           = "keda:keda-operator"    # KEDA Helm 차트 기본 SA 명(§5-3)
-    karpenter      = "kube-system:karpenter" # 관례상 kube-system
+    keda           = "keda:keda-operator"                # KEDA Helm 차트 기본 SA 명(§5-3)
+    karpenter      = "kube-system:karpenter"             # 관례상 kube-system
+    simulator      = "hailcast:simulator-sa"             # s3 백엔드로 simulator/status.json 쓰기(§5-3)
+    eso            = "external-secrets:external-secrets" # ESO 컨트롤러 SA(Helm 기본값). RDS 시크릿 읽기
   }
 
   # for_each 의 '키'는 위 리터럴 문자열과 plan 시점에 확정된 불리언으로만 결정된다.
@@ -186,6 +188,7 @@ data "aws_iam_policy_document" "predict" {
       "${var.model_bucket_arn}/models/*",
       "${var.model_bucket_arn}/weather/*",
       "${var.model_bucket_arn}/traffic/instances/*",
+      "${var.model_bucket_arn}/simulator/*",
     ]
   }
 
@@ -349,7 +352,36 @@ data "aws_iam_policy_document" "keda" {
   }
 }
 
-# 위 5종의 정책 생성·연결을 한 번에.
+# ── 9) simulator — 시뮬레이터 상태 파일 쓰기 만 ──────────────
+# K8s 에 s3 백엔드로 뜨면 2초마다 simulator/status.json 을 S3 에 쓴다
+# (app simulator/schedulers/status_scheduler.py). 그 프리픽스 쓰기 하나면 된다.
+data "aws_iam_policy_document" "simulator" {
+  count = var.enable_app_irsa ? 1 : 0
+
+  statement {
+    sid       = "WriteSimulatorStatus"
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${var.model_bucket_arn}/simulator/*"]
+  }
+}
+
+# ── 10) eso — External Secrets 컨트롤러가 RDS 비번 시크릿을 읽는다 ──
+# RDS 자동생성 시크릿 하나만 GetSecretValue 한다. ESO 가 그 값을 hailcast 네임스페이스에
+# K8s Secret 으로 복제하면 call-api·worker·predict 가 환경변수로 읽는다(§5-4).
+# AWS 를 직접 부르는 앱 파드는 없다 — 이 컨트롤러 하나뿐이다.
+data "aws_iam_policy_document" "eso" {
+  count = var.enable_app_irsa ? 1 : 0
+
+  statement {
+    sid       = "ReadRdsMasterSecret"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [var.rds_master_secret_arn]
+  }
+}
+
+# 위 7종의 정책 생성·연결을 한 번에.
 # for_each 키는 리터럴 + plan 시점 확정 불리언으로만 정해진다(정책 '본문'이 미상이어도 무방 —
 # 미상이면 안 되는 건 '키'이지 '값'이 아니다).
 locals {
@@ -359,6 +391,8 @@ locals {
     worker         = data.aws_iam_policy_document.worker[0].json
     "weather-cron" = data.aws_iam_policy_document.weather_cron[0].json
     keda           = data.aws_iam_policy_document.keda[0].json
+    simulator      = data.aws_iam_policy_document.simulator[0].json
+    eso            = data.aws_iam_policy_document.eso[0].json
   } : {}
 
   # ⚠️ aws_iam_policy 의 description 은 AWS 에 수정 API 가 없어 Terraform 이 '정책을 지우고 다시 만든다'
@@ -366,11 +400,13 @@ locals {
   #    맞을 수 있다. 나중에 넣으면 비용이 생기고 지금 넣으면 공짜다 → 처음부터 채운다.
   #    (SG 의 description 과 같은 성질)
   irsa_app_policy_desc = {
-    predict        = "predict-sa: S3 읽기(models·weather·traffic) + 읽기쓰기(predictions·dashboard·scaling) + ListBucket + DynamoDB 오답노트 기록 + SQS 큐 적체 조회."
+    predict        = "predict-sa: S3 읽기(models·weather·traffic·simulator) + 읽기쓰기(predictions·dashboard·scaling) + ListBucket + DynamoDB 오답노트 기록 + SQS 큐 적체 조회."
     "call-api"     = "call-api-sa: SQS 콜 큐 송신 + S3 calls/ 읽기 + traffic/instances/ 쓰기(수신·삭제 없음)."
     worker         = "worker-sa: SQS 콜 큐 수신·삭제 + S3 calls/ 읽기쓰기(송신 없음)."
     "weather-cron" = "weather-cron-sa: S3 weather/ 쓰기 전용(읽기 없음 · SQS·DynamoDB 없음)."
     keda           = "keda-operator: SQS 큐 길이 조회 전용(반응형 스케일 트리거)."
+    simulator      = "simulator-sa: S3 simulator/ 쓰기 전용(status.json)."
+    eso            = "external-secrets: RDS 자동생성 비번 시크릿 GetSecretValue 전용."
   }
 }
 

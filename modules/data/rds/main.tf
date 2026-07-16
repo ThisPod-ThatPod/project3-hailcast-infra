@@ -23,7 +23,9 @@ resource "aws_db_instance" "primary" {
 
   db_name  = var.db_name
   username = var.db_username
-  password = var.db_password
+
+  # 비번은 RDS 가 자동 생성해 Secrets Manager 에 넣는다. tfstate·코드에 평문이 안 남는다(§5-4).
+  manage_master_user_password = true
 
   db_subnet_group_name   = aws_db_subnet_group.postgres.name
   vpc_security_group_ids = var.vpc_security_group_ids
