@@ -181,7 +181,7 @@ resource "aws_iam_role" "tf_apply" {
 #      - 외부 계정을 신뢰하는 역할을 새로 만들고 AdministratorAccess 를 붙인다
 #      - 또는 이 역할 자신의 신뢰정책(AssumeRolePolicy)에 공격자 계정을 끼워 넣는다
 #    아래 DenyIamUserPersistence 는 '유저 + 장기 액세스 키' 경로만 막는다. 역할 경로는 못 막는다.
-#    (permissions boundary 로 막을 수 있으나, terraform 이 만드는 IRSA 역할 8종에 전부
+#    (permissions boundary 로 막을 수 있으나, terraform 이 만드는 IRSA 역할 10종에 전부
 #     boundary 를 강제해야 해서 지금 규모엔 과하다. 남겨 두는 개선점이다.)
 #
 # 그래서 진짜 방어선은 IAM 이 아니라 **신뢰정책이다** — 위 tf_apply_assume 의
@@ -195,7 +195,7 @@ data "aws_iam_policy_document" "tf_apply" {
     actions = [
       "ec2:*",                     # VPC·서브넷·NAT·SG·엔드포인트·런치템플릿
       "eks:*",                     # 클러스터·노드그룹·access entry·애드온
-      "iam:*",                     # IRSA 역할 8종·OIDC provider·정책
+      "iam:*",                     # IRSA 역할 10종·OIDC provider·정책
       "rds:*",                     # RDS·서브넷그룹
       "s3:*",                      # 모델 버킷·tfstate
       "sqs:*",                     # 콜 큐·Karpenter 중단 큐
@@ -207,6 +207,9 @@ data "aws_iam_policy_document" "tf_apply" {
       "logs:*",                    # CloudWatch 로그그룹
       "kms:*",                     # 암호화 키 참조
       "elasticloadbalancing:*",    # ALB(컨트롤러가 만들지만 terraform 이 조회)
+      "route53:*",                 # edge 호스팅 영역 조회·레코드(apex·www·origin·ACM 검증)
+      "cloudfront:*",              # edge 배포판·관리형 캐시/오리진요청 정책 조회
+      "acm:*",                     # edge 인증서 2리전(서울 ALB·버지니아 CloudFront)
       "autoscaling:*",             # 노드그룹 ASG
       "application-autoscaling:*", # 스케일링 정책
       "cloudwatch:*",              # 알람·지표
