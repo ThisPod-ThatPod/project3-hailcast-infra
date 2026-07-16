@@ -13,3 +13,10 @@ cluster_editor_principal_arns = [
 # ⚠️ apply 를 실행하는 principal 은 넣지 마십시오.
 #    bootstrap_cluster_creator_admin_permissions = true 라 자동 등재되며,
 #    같은 principal 이 두 access entry 에 들어가면 apply 가 실패합니다.
+
+# ── 엣지 (Y7) ──────────────────────────────
+# 1단계: 도메인 준비 후 enable_edge = true → 인증서만 발급 (ALB 없어도 됨)
+# 2단계: 배포팀이 Ingress 올린 뒤 alb_dns_name 채움 → CloudFront 생성
+enable_edge  = false
+domain_name  = "myminiinfra.store"
+alb_dns_name = "" # kubectl get ingress -n hailcast 로 얻은 ADDRESS

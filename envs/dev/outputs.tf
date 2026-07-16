@@ -136,3 +136,16 @@ output "model_bucket_name" {
   description = "S3 모델 버킷 이름"
   value       = module.storage.model_bucket_name
 }
+
+output "alb_certificate_arn" {
+  description = "배포팀이 Ingress annotation(alb.ingress.kubernetes.io/certificate-arn)에 넣을 값"
+  value       = var.enable_edge ? module.edge[0].alb_certificate_arn : ""
+}
+
+output "service_url" {
+  value = var.enable_edge ? module.edge[0].service_url : ""
+}
+
+output "origin_domain_name" {
+  value = var.enable_edge ? module.edge[0].origin_domain_name : ""
+}

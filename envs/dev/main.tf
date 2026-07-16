@@ -97,3 +97,24 @@ module "cicd" {
   tfstate_bucket = "hailcast-dev-tfstate-7dde"
   tfstate_key    = "dev/terraform.tfstate"
 }
+
+# ── Y7 엣지 — Route53 + CloudFront ──────────────────────────
+# 트랙 맨 끝: ALB(배포팀 Ingress)가 떠야 오리진을 연결할 수 있다.
+#   enable_edge = false  → 리소스 0개 (기본. 다른 팀 apply 를 막지 않는다)
+#   enable_edge = true   → ACM 인증서 2종 발급 (ALB 없어도 됨)
+#   + alb_dns_name 채움  → CloudFront·레코드까지 생성
+module "edge" {
+  source = "../../modules/edge"
+  count  = var.enable_edge ? 1 : 0
+
+  # 형제 모듈끼리는 서로를 못 본다. provider 도 루트가 넘겨준다.
+  providers = {
+    aws          = aws
+    aws.virginia = aws.virginia
+  }
+
+  project_name = var.project_name
+  environment  = var.environment
+  domain_name  = var.domain_name
+  alb_dns_name = var.alb_dns_name
+}
