@@ -215,8 +215,10 @@ data "aws_iam_policy_document" "predict" {
   #    프리픽스 아래를 훑는 동작이라 GetObject 로는 안 된다.
   #    대상이 '버킷 자체'라 /* 를 붙이지 않는다. 붙이면 목록 조회가 인가되지 않는다.
   #    조건이 없으면 버킷 전체를 목록 조회할 수 있어 s3:prefix 로 좁힌다.
-  #    StringEquals 로 걸면 안 된다. 앱이 보내는 실값이 "traffic/instances/" 라 리터럴 비교가 안 맞고,
-  #    막히면 증상이 AccessDenied 가 아니라 집계 0 으로 보인다.
+  #    StringEquals 로 걸면 안 된다. 앱이 보내는 실값이 "traffic/instances/" 라 리터럴 비교가 안 맞는다.
+  #    막히면 파드는 안 죽는다. 스케줄러가 모든 예외를 삼켜 로그와 failure_count 로만 남기므로
+  #    (app common/core/scheduler.py:67-73), 겉은 Healthy·200 인데 dashboard/traffic.json 이 갱신을 멈춘다.
+  #    증상이 "권한 오류"가 아니라 "그래프가 안 움직임"으로 보인다.
   statement {
     sid       = "ListBucketForTrafficShards"
     effect    = "Allow"
