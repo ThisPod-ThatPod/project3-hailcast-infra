@@ -48,9 +48,9 @@ variable "private_subnet_cidrs" {
 }
 
 # ── 클러스터 출입 명단 (eks 모듈 access.tf 로 넘어간다) ──────────────────
-# ⚠️ 실제 ARN 은 terraform.tfvars(gitignore)에만. 이 레포는 퍼블릭이다.
+# 실제 ARN 은 terraform.tfvars(gitignore)에만. 이 레포는 퍼블릭이다.
 variable "cluster_admin_principal_arns" {
-  description = "클러스터 전권을 줄 IAM principal ARN 목록. ⚠️ apply 주체는 넣지 마라(자동 등재 → 중복 시 apply 실패)."
+  description = "클러스터 전권을 줄 IAM principal ARN 목록. apply 주체는 넣지 마라(자동 등재 → 중복 시 apply 실패)."
   type        = list(string)
   default     = []
 }
@@ -64,14 +64,14 @@ variable "cluster_editor_principal_arns" {
 variable "enable_edge" {
   description = <<-EOT
     엣지(Route53·CloudFront·ACM) 생성 스위치.
-    기본 false — 도메인이 준비되기 전에는 켜지 않는다. 켜도 alb_dns_name 이 비면 인증서만 만든다.
+    기본 false. 도메인이 준비되기 전에는 켜지 않는다. 켜도 alb_dns_name 이 비면 인증서만 만든다.
   EOT
   type        = bool
   default     = false
 }
 
 variable "domain_name" {
-  description = "루트 도메인. 예: myminiinfra.store. enable_edge = true 일 때 필수"
+  description = "서비스 도메인. 예: hailcast.myminiinfra.store. 이 이름의 Route53 호스팅 영역이 이미 있어야 한다(edge 모듈이 data 로 조회한다). enable_edge = true 일 때 필수"
   type        = string
   default     = ""
 }

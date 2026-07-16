@@ -1,6 +1,6 @@
 # edge 모듈 - outputs.tf
 
-# ⭐ 배포팀 인터페이스 — Ingress annotation 에 넣을 값
+# 배포팀 인터페이스. Ingress annotation 에 넣을 값
 #    alb.ingress.kubernetes.io/certificate-arn: <이 값>
 output "alb_certificate_arn" {
   description = "ALB 용 ACM 인증서 ARN (서울). 배포팀이 Ingress annotation 에 사용"
