@@ -9,7 +9,7 @@ variable "environment" {
 }
 
 variable "domain_name" {
-  description = "루트 도메인. 예: myminiinfra.store (끝에 점 없이)"
+  description = "서비스 도메인. 예: hailcast.myminiinfra.store (끝에 점 없이). 이 이름의 호스팅 영역을 data 로 조회하므로 영역이 먼저 있어야 한다"
   type        = string
 }
 

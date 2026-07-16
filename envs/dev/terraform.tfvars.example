@@ -1,5 +1,5 @@
 # 이 파일을 복사해서 terraform.tfvars 를 만드십시오.  cp terraform.tfvars.example terraform.tfvars
-# terraform.tfvars 는 gitignore 입니다 — ARN 에 계정 ID 가 들어가고 이 레포는 PUBLIC 입니다.
+# terraform.tfvars 는 gitignore 입니다. ARN 에 계정 ID 가 들어가고 이 레포는 PUBLIC 입니다.
 
 cluster_admin_principal_arns = [
   "arn:aws:iam::<ACCOUNT_ID>:user/<팀장>",
@@ -10,7 +10,7 @@ cluster_editor_principal_arns = [
   "arn:aws:iam::<ACCOUNT_ID>:user/<앱팀>",
 ]
 
-# ⚠️ apply 를 실행하는 principal 은 넣지 마십시오.
+# apply 를 실행하는 principal 은 넣지 마십시오.
 #    bootstrap_cluster_creator_admin_permissions = true 라 자동 등재되며,
 #    같은 principal 이 두 access entry 에 들어가면 apply 가 실패합니다.
 
@@ -18,5 +18,5 @@ cluster_editor_principal_arns = [
 # 1단계: 도메인 준비 후 enable_edge = true → 인증서만 발급 (ALB 없어도 됨)
 # 2단계: 배포팀이 Ingress 올린 뒤 alb_dns_name 채움 → CloudFront 생성
 enable_edge  = false
-domain_name  = "myminiinfra.store"
+domain_name  = "hailcast.myminiinfra.store"
 alb_dns_name = "" # kubectl get ingress -n hailcast 로 얻은 ADDRESS
