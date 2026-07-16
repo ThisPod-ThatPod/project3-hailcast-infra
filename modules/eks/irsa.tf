@@ -214,11 +214,20 @@ data "aws_iam_policy_document" "predict" {
   #    합산한다(app traffic_aggregator_service.py:46 → s3_adapter.py:90 list_objects_v2).
   #    프리픽스 아래를 훑는 동작이라 GetObject 로는 안 된다.
   #    대상이 '버킷 자체'라 /* 를 붙이지 않는다 — 붙이면 목록 조회가 인가되지 않는다.
+  #    조건이 없으면 버킷 전체를 목록 조회할 수 있어 s3:prefix 로 좁힌다.
+  #    StringEquals 로 걸면 안 된다. 앱이 보내는 실값이 "traffic/instances/" 라 리터럴 비교가 안 맞고,
+  #    막히면 증상이 AccessDenied 가 아니라 집계 0 으로 보인다.
   statement {
     sid       = "ListBucketForTrafficShards"
     effect    = "Allow"
     actions   = ["s3:ListBucket"]
     resources = [var.model_bucket_arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["traffic/instances/*"]
+    }
   }
 
   # 오답노트는 '기록 전용'. 읽기·삭제·Scan 을 주면 재학습 데이터가 지워질 수 있다.
