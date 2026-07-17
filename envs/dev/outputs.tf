@@ -149,3 +149,12 @@ output "service_url" {
 output "origin_domain_name" {
   value = var.enable_edge ? module.edge[0].origin_domain_name : ""
 }
+
+# NS 위임이 부모 도메인 계정에 걸려 있어서, 위임 전에는 서비스 도메인이 해석되지 않는다.
+# 그때 이 주소를 직접 때리면 DNS 없이 엣지를 검증할 수 있다. CloudFront 가 이 호스트에는
+# 자기 기본 인증서를 내주고, origin request policy 가 Host 를 오리진 도메인으로 바꿔 보내므로
+# ALB 라우팅까지 함께 확인된다.
+output "cloudfront_domain_name" {
+  description = "CloudFront 자동 주소. DNS 위임 전 엣지 검증용"
+  value       = var.enable_edge ? module.edge[0].cloudfront_domain_name : ""
+}
