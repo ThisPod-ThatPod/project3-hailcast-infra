@@ -6,6 +6,8 @@
 # 이름은 하드코딩 대신 name_prefix 로 파생해 단일 진실원천(규약서 §2)을 지킨다.
 locals {
   name_prefix = "${var.project_name}-${var.environment}" # hailcast-dev
+  # 서브넷 이름에는 AZ 전체가 아니라 접미사(2a·2c)만 쓴다 — 규약서 §5-1 (hailcast-dev-subnet-public-2a)
+  az_suffix = [for az in var.availability_zones : substr(az, length(az) - 2, 2)]
 }
 
 ############################################
@@ -44,7 +46,7 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "${local.name_prefix}-subnet-public-${var.availability_zones[count.index]}"
+    Name = "${local.name_prefix}-subnet-public-${local.az_suffix[count.index]}"
     Type = "public"
     # AWS LB Controller 가 '인터넷 향 ALB' 를 놓을 퍼블릭 서브넷을 이 태그로 자동 발견한다.
     # (private 의 internal-elb 와 짝. 빠지면 ALB 생성이 실패한다 — 규약서 §6-1)
@@ -63,7 +65,7 @@ resource "aws_subnet" "private" {
   availability_zone = var.availability_zones[count.index]
 
   tags = {
-    Name = "${local.name_prefix}-subnet-private-${var.availability_zones[count.index]}"
+    Name = "${local.name_prefix}-subnet-private-${local.az_suffix[count.index]}"
     Type = "private"
     # 내부 향 LB 자동 발견용.
     "kubernetes.io/role/internal-elb" = "1"
