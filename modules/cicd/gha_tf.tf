@@ -24,7 +24,7 @@ locals {
 }
 
 # ── plan 역할 신뢰정책 ─────────────────────────────────────
-# infra 레포의 PR 과 dev 브랜치 push 에서만 맡을 수 있다.
+# infra 레포의 PR(pull_request)에서만 맡을 수 있다. dev push 는 허용하지 않는다(아래 이유).
 # ※ 포크가 연 PR 에는 GitHub 이 OIDC 토큰(id-token)을 주지 않는다 → 남이 이 역할을 못 맡는다.
 data "aws_iam_policy_document" "tf_plan_assume" {
   statement {
@@ -59,7 +59,7 @@ data "aws_iam_policy_document" "tf_plan_assume" {
 
 resource "aws_iam_role" "tf_plan" {
   name               = local.tf_plan_role_name
-  description        = "GitHub Actions - terraform plan 전용(읽기). infra 레포의 PR·dev push 만 assume 가능."
+  description        = "GitHub Actions - terraform plan 전용(읽기). infra 레포의 pull_request 만 assume 가능."
   assume_role_policy = data.aws_iam_policy_document.tf_plan_assume.json
   tags               = merge(var.tags, { Name = local.tf_plan_role_name })
 }
@@ -72,7 +72,7 @@ resource "aws_iam_role_policy_attachment" "tf_plan_readonly" {
 
 # ReadOnlyAccess 만으로는 plan 이 죽는 두 곳을 메운다.
 data "aws_iam_policy_document" "tf_plan_extra" {
-  # ① tfstate 잠금 — plan 도 state 를 잠근다(use_lockfile=true → S3 에 <key>.tflock 을 쓰고 지운다).
+  # tfstate 잠금 — plan 도 state 를 잠근다(use_lockfile=true → S3 에 <key>.tflock 을 쓰고 지운다).
   #    ReadOnlyAccess 는 PutObject·DeleteObject 를 안 준다 → plan 이 잠금을 못 걸어 죽는다.
   #
   # ⭐ 대상을 '잠금 파일 하나' 로 못 박는다. 버킷 전체(/*)에 쓰기를 주면 안 된다.
@@ -93,17 +93,6 @@ data "aws_iam_policy_document" "tf_plan_extra" {
     resources = ["${local.tfstate_bucket_arn}/${var.tfstate_key}.tflock"]
   }
 
-  # ② aws_secretsmanager_secret_version 을 refresh 하려면 값을 읽어야 한다.
-  #    ReadOnlyAccess 에는 GetSecretValue 가 없다(실측: Describe*·List* 만).
-  #    없으면 plan 이 AccessDenied 로 죽는다.
-  #    ⚠️ 이걸 준다고 새로 위험해지는 건 아니다 — 어차피 tfstate 에 비번이 평문으로 있고
-  #       plan 은 그 state 를 읽는다. 다만 '우리 시크릿 하나' 로 좁혀 둔다.
-  statement {
-    sid       = "ReadOwnSecretForRefresh"
-    effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = ["arn:aws:secretsmanager:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}-${var.environment}-*"]
-  }
 }
 
 resource "aws_iam_role_policy" "tf_plan_extra" {

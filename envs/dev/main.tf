@@ -18,7 +18,8 @@ module "network" {
 # ── 데이터: RDS(PostgreSQL) + 자격증명(Secrets Manager) + DB 주소(Parameter Store) ──
 # network 출력을 스레딩해 RDS 를 프라이빗 서브넷에 배치한다. AZ 는 목록 첫째(Single-AZ 데모).
 # eks 노드 SG 를 받아 RDS 5432 인바운드를 그 SG 에서 온 것만 허용한다(§5-5).
-# 의존 방향은 network → eks → data 한 방향뿐이라 순환이 없다(eks 는 data 를 참조하지 않는다).
+# 모듈 참조는 data ↔ eks 양방향이지만(data 의 큐·시크릿 ARN → eks IRSA 정책 · eks 노드 SG → data ingress 규칙)
+# 서로 다른 리소스 체인이라 리소스 단위 그래프에는 순환이 없다.
 module "data" {
   source = "../../modules/data"
 

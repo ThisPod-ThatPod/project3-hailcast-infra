@@ -101,7 +101,7 @@ output "eks_node_group_name" {
 }
 
 output "eks_irsa_role_arns" {
-  description = "IRSA 역할 키→ARN 맵(§5-3). manifests SA 애노테이션이 참조. 현재 lbctrl·monitoring 2종, ARN 접점 해소 시 확장."
+  description = "IRSA 역할 키→ARN 맵. manifests SA 애노테이션이 참조. 종수·목록은 규약서 §5-3 이 정한다."
   value       = module.eks.irsa_role_arns
 }
 

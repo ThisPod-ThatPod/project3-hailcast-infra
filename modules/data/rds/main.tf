@@ -9,7 +9,7 @@ resource "aws_db_subnet_group" "postgres" {
 }
 
 resource "aws_db_instance" "primary" {
-  # 규약서 §5-4 계약: hailcast-dev-rds-postgres (시크릿명 '...-rds-postgres-credentials' 규칙과 정합)
+  # 규약서 §5-4 계약: hailcast-dev-rds-postgres
   identifier        = "${var.project_name}-${var.environment}-rds-postgres"
   allocated_storage = var.allocated_storage
   engine            = "postgres"
