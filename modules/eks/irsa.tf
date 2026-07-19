@@ -143,7 +143,6 @@ resource "aws_iam_role_policy_attachment" "monitoring" {
 #   traffic/instances/*   |  읽기   |   쓰기   |   -    |     -
 #   dashboard/*           |  읽기+쓰기 |  -     |   -    |     -
 #   scaling/*             |  읽기+쓰기 |  -     |   -    |     -
-#   calls/*               |    -    |   읽기   | 읽기+쓰기 |   -
 #
 # 앱의 FileStore 는 read 하기 전에 exists() 를 먼저 부르고, exists() 는 head_object 다
 #    (app common/aws/s3_adapter.py:95-100 · head_object 는 :97). HeadObject 는 s3:GetObject 권한으로 인가되므로
@@ -271,9 +270,10 @@ data "aws_iam_policy_document" "predict" {
   }
 }
 
-# ── 4) call-api - 큐에 '넣기만' + 콜 조회(읽기) + 트래픽 샤드(쓰기) ──
+# ── 4) call-api - 큐에 '넣기만' + 트래픽 샤드(쓰기) ─────────
 # 최소권한의 요점: 콜 API 에 수신·삭제를 주면 자기가 쌓은 콜을 지울 수 있게 된다.
 # 쓸 일 없는 권한은 사고만 낸다 → 워커와 역할을 쪼갠 이유(§5-3).
+# 콜 기록 조회(GET /call/{id})는 RDS Call 테이블이라 S3 권한이 필요 없다(규약서 §8-1).
 data "aws_iam_policy_document" "call_api" {
   count = var.enable_app_irsa ? 1 : 0
 
@@ -282,16 +282,6 @@ data "aws_iam_policy_document" "call_api" {
     effect    = "Allow"
     actions   = ["sqs:SendMessage", "sqs:GetQueueUrl"]
     resources = [var.sqs_call_queue_arn]
-  }
-
-  # GET /call/{id} 가 worker 의 처리 결과를 읽는다(app call-api/services/call_service.py:59).
-  # 쓰는 쪽은 worker 다 → call-api 는 '읽기만'. 여기에 PutObject 를 주면 콜 API 가
-  # 처리 상태를 스스로 조작할 수 있게 된다.
-  statement {
-    sid       = "ReadCallRecords"
-    effect    = "Allow"
-    actions   = ["s3:GetObject"]
-    resources = ["${var.model_bucket_arn}/calls/*"]
   }
 
   # 파드마다 자기 몫의 콜 수를 10초마다 샤드 파일로 쓴다(app call-api/services/traffic_counter.py:34).
@@ -304,7 +294,9 @@ data "aws_iam_policy_document" "call_api" {
   }
 }
 
-# ── 5) worker - 큐에서 '꺼내고 지우기만' + 콜 기록 저장 ─────
+# ── 5) worker - 큐에서 '꺼내고 지우기만' ────────────────────
+# 콜 기록 저장은 RDS Call 테이블이라 S3 권한이 없다(규약서 §8-1). RDS 는 IRSA 가 아니라
+# 아이디·비번(ESO)과 SG 로 인증한다(규약서 §5-4).
 data "aws_iam_policy_document" "worker" {
   count = var.enable_app_irsa ? 1 : 0
 
@@ -313,16 +305,6 @@ data "aws_iam_policy_document" "worker" {
     effect    = "Allow"
     actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueUrl"]
     resources = [var.sqs_call_queue_arn]
-  }
-
-  # 콜 기록의 '쓰는 쪽'. 읽기가 함께 필요한 건 멱등 때문이다. 같은 메시지를 다시 받으면
-  # (visibility timeout 만료 등) 이미 저장됐는지 먼저 읽어 보고, 있으면 다시 쓰지 않는다
-  # (app worker/services/worker_service.py:92 읽기 · :115 쓰기 · 키 조립 :88). 읽기를 빼면 재수신 때마다 덮어쓴다.
-  statement {
-    sid       = "ReadWriteCallRecords"
-    effect    = "Allow"
-    actions   = ["s3:GetObject", "s3:PutObject"]
-    resources = ["${var.model_bucket_arn}/calls/*"]
   }
 }
 
@@ -412,8 +394,8 @@ locals {
   #    (SG 의 description 과 같은 성질)
   irsa_app_policy_desc = {
     predict        = "predict-sa: S3 읽기(models·weather·traffic·simulator) + 읽기쓰기(predictions·dashboard·scaling) + ListBucket + DynamoDB 오답노트 기록 + SQS 큐 적체 조회."
-    "call-api"     = "call-api-sa: SQS 콜 큐 송신 + S3 calls/ 읽기 + traffic/instances/ 쓰기(수신·삭제 없음)."
-    worker         = "worker-sa: SQS 콜 큐 수신·삭제 + S3 calls/ 읽기쓰기(송신 없음)."
+    "call-api"     = "call-api-sa: SQS 콜 큐 송신 + S3 traffic/instances/ 쓰기(수신·삭제 없음)."
+    worker         = "worker-sa: SQS 콜 큐 수신·삭제 전용(송신·S3 없음)."
     "weather-cron" = "weather-cron-sa: S3 weather/ 쓰기 전용(읽기 없음 · SQS·DynamoDB 없음)."
     keda           = "keda-operator: SQS 큐 길이 조회 전용(반응형 스케일 트리거)."
     simulator      = "simulator-sa: S3 simulator/ 쓰기 전용(status.json)."
