@@ -55,6 +55,8 @@ project3-hailcast-infra/
 
 ## 3. 아키텍처 요약
 
+![전체 아키텍처](./docs/images/architecture.png)
+
 VPC `10.0.0.0/16`, AZ 2a와 2c.
 
 | 계층 | 구성 |
@@ -63,6 +65,10 @@ VPC `10.0.0.0/16`, AZ 2a와 2c.
 | 컴퓨트 | EKS. 시스템 노드그룹(관리형)에 플랫폼 파드, 앱 파드는 Karpenter가 공급하는 Spot 노드에 |
 | 데이터 | S3(모델, 날씨, 트래픽 샤드), RDS PostgreSQL Single-AZ(콜, 예측, 스케일링 이력), DynamoDB(오답노트), SQS(콜 큐와 Karpenter 중단 큐), Secrets Manager(RDS 자동 생성 비번), Parameter Store(RDS 엔드포인트) |
 | 접근, 보안 | SSH 인바운드 없음(SSM Session Manager). RDS 5432는 노드 SG에서 온 것만. 파드 권한은 IRSA로 역할별 분리 |
+
+노드와 서브넷 배치 상세:
+
+![클러스터 구성도](./docs/images/cluster-topology.png)
 
 ## 4. 설계 하이라이트
 
@@ -111,6 +117,10 @@ predict 내부 스케줄러 2개:
 KEDA ─(상시)→ SQS 콜 큐 길이로 worker 반응형 확장
 Karpenter ─(필요 시)→ 노드 공급, 중단 큐로 Spot 회수 대응
 ```
+
+예측이 빗나갔을 때의 반응형 분기까지 포함한 전체 흐름:
+
+![선제 스케일링 흐름](./docs/images/scaling-flow.png)
 
 - 스케일 대상은 worker 하나다. predict는 replicas 1로 고정한다.
 - 권한은 두 체계다. AWS 자원 접근은 IRSA(AWS IAM), ScaledObject patch는 K8s RBAC.
