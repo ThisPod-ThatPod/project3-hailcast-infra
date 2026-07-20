@@ -19,7 +19,7 @@
 #    (에러 없이 연결 타임아웃만 나서 원인 찾기가 어렵다 — §6-1 "빠지면 몇 시간 디버깅")
 resource "aws_security_group" "node" {
   name        = "${local.name_prefix}-sg-eks-node"
-  description = "EKS 노드/파드용. inbound 0(클러스터 SG가 노드간 통신 담당) · RDS 5432 ingress의 지목 대상"
+  description = "EKS node/pod SG. No inbound rules (cluster SG covers node-to-node). Target of RDS 5432 ingress."
   vpc_id      = var.vpc_id
 
   tags = merge(var.tags, {

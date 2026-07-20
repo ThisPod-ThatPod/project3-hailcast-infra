@@ -59,7 +59,7 @@ data "aws_iam_policy_document" "tf_plan_assume" {
 
 resource "aws_iam_role" "tf_plan" {
   name               = local.tf_plan_role_name
-  description        = "GitHub Actions - terraform plan 전용(읽기). infra 레포의 pull_request 만 assume 가능."
+  description        = "GitHub Actions - terraform plan (read-only). Assumable only by pull_request runs of the infra repo."
   assume_role_policy = data.aws_iam_policy_document.tf_plan_assume.json
   tags               = merge(var.tags, { Name = local.tf_plan_role_name })
 }
@@ -150,7 +150,7 @@ data "aws_iam_policy_document" "tf_apply_assume" {
 
 resource "aws_iam_role" "tf_apply" {
   name               = local.tf_apply_role_name
-  description        = "GitHub Actions - terraform apply. '${var.apply_environment}' environment 승인 후에만 assume 가능."
+  description        = "GitHub Actions - terraform apply. Assumable only after '${var.apply_environment}' environment approval."
   assume_role_policy = data.aws_iam_policy_document.tf_apply_assume.json
 
   # 기본값은 1시간이다. 콜드 apply(VPC+NAT+EKS+노드그룹+RDS)는 그걸 넘길 수 있다.
