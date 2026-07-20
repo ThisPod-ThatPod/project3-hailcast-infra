@@ -142,7 +142,6 @@ resource "aws_iam_role_policy_attachment" "monitoring" {
 #   weather/*             |  읽기   |    -     |   -    |   쓰기
 #   traffic/instances/*   |  읽기   |   쓰기   |   -    |     -
 #   dashboard/*           |  읽기+쓰기 |  -     |   -    |     -
-#   scaling/*             |  읽기+쓰기 |  -     |   -    |     -
 #
 # 앱의 FileStore 는 read 하기 전에 exists() 를 먼저 부르고, exists() 는 head_object 다
 #    (app common/aws/s3_adapter.py:95-100 · head_object 는 :97). HeadObject 는 s3:GetObject 권한으로 인가되므로
@@ -196,7 +195,7 @@ data "aws_iam_policy_document" "predict" {
   #                  latest.json 하나로 좁히면 안 된다. history/<타임스탬프>.json 이 함께 올라간다
   #                     (prediction_keep_history_in_s3 기본 true). 프리픽스 전체를 줘야 한다(§8).
   #   dashboard/*    트래픽 집계·이력·파드 이력 (traffic_aggregator_service.py:30,64,67 · pod_forecast_service.py:84,97)
-  #   scaling/*      스케일 이벤트 이력·직전 이벤트 (scaler_service.py:72,238-239)
+  #   scaling 이력은 RDS 로 컷오버 완료(2026-07-20 · app scaling_repository.py:2). S3 쓰기 제거.
   statement {
     sid     = "ReadWritePrefixes"
     effect  = "Allow"
@@ -204,7 +203,6 @@ data "aws_iam_policy_document" "predict" {
     resources = [
       "${var.model_bucket_arn}/predictions/*",
       "${var.model_bucket_arn}/dashboard/*",
-      "${var.model_bucket_arn}/scaling/*",
     ]
   }
 
@@ -393,7 +391,7 @@ locals {
   #    맞을 수 있다. 나중에 넣으면 비용이 생기고 지금 넣으면 공짜다 → 처음부터 채운다.
   #    (SG 의 description 과 같은 성질)
   irsa_app_policy_desc = {
-    predict        = "predict-sa: S3 읽기(models·weather·traffic·simulator) + 읽기쓰기(predictions·dashboard·scaling) + ListBucket + DynamoDB 오답노트 기록 + SQS 큐 적체 조회."
+    predict        = "predict-sa: S3 읽기(models·weather·traffic·simulator) + 읽기쓰기(predictions·dashboard) + ListBucket + DynamoDB 오답노트 기록 + SQS 큐 적체 조회."
     "call-api"     = "call-api-sa: SQS 콜 큐 송신 + S3 traffic/instances/ 쓰기(수신·삭제 없음)."
     worker         = "worker-sa: SQS 콜 큐 수신·삭제 전용(송신·S3 없음)."
     "weather-cron" = "weather-cron-sa: S3 weather/ 쓰기 전용(읽기 없음 · SQS·DynamoDB 없음)."
