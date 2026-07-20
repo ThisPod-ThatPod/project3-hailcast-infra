@@ -17,7 +17,7 @@ locals {
 #    → egress·ingress 모두 독립 리소스로 두어 관리 방식을 통일한다.
 resource "aws_security_group" "rds" {
   name        = "${local.name_prefix}-sg-rds"
-  description = "RDS(PostgreSQL) - 5432 inbound from node SG only (ingress는 노드 SG 생성 후 추가)"
+  description = "RDS(PostgreSQL) - 5432 inbound from node SG only (ingress rule attached after node SG creation)"
   vpc_id      = var.vpc_id
 
   tags = {
