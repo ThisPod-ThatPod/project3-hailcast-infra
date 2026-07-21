@@ -131,6 +131,9 @@ resource "aws_eks_node_group" "system" {
 
   lifecycle {
     # desired_size 는 운영 중 바뀔 수 있으니 drift 로 되돌리지 않는다.
-    ignore_changes = [scaling_config[0].desired_size]
+    # min_size 도 무시한다 - 야간 절전 스케줄(§5-8)이 매일 min·desired 를 0↔2 로 바꾸는 소유자다.
+    # 안 무시하면 야간(02~10시) apply 가 min 만 2로 되돌리려다 desired(0·ignore)와 어긋나
+    # min > desired 로 UpdateNodegroupConfig 가 거부되거나, 최소한 plan 마다 diff 노이즈가 난다.
+    ignore_changes = [scaling_config[0].desired_size, scaling_config[0].min_size]
   }
 }

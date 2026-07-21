@@ -61,6 +61,15 @@ variable "cluster_editor_principal_arns" {
   default     = []
 }
 
+variable "enable_night_shutdown" {
+  description = <<-EOT
+    야간 절전(§5-8) 스위치. 기본 true — 매일 KST 02~10시에 시스템 노드그룹·RDS 를 내렸다 올린다.
+    시연·밤샘 작업 날은 false 로 apply 하거나 콘솔에서 스케줄을 DISABLED 로 바꾼다.
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "enable_edge" {
   description = <<-EOT
     엣지(Route53·CloudFront·ACM) 생성 스위치.
