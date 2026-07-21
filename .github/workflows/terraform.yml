@@ -57,6 +57,14 @@ env:
   AWS_REGION: ap-northeast-2
   TF_VERSION: "1.15.5" # use_lockfile 은 1.11+ 필요
   ENV_DIR: envs/dev
+  # CI 는 tfvars(gitignore) 없이 돈다. 비밀 아닌 값은 variables.tf 기본값에 있고,
+  # 계정 ID 가 들어가는 access entry ARN 목록만 secret 으로 주입한다(레포가 퍼블릭이라 코드에 못 둔다).
+  # ⚠️ secret 은 repo secret 으로 등록한다(environment secret 이면 plan job 이 못 받는다).
+  #    미등록이면 빈 문자열이 주입되고 terraform 이 list 파싱 에러로 죽는다(fail-closed · plan 포함 전부).
+  #    → 이 워크플로 변경을 머지하기 전에 secret 등록을 끝내야 PR plan 이 초록불이 된다.
+  #    값 형식은 JSON 배열 문자열: ["arn:aws:iam::<계정>:user/<이름>", ...] · editor 는 [] 라도 등록한다.
+  TF_VAR_cluster_admin_principal_arns: ${{ secrets.CLUSTER_ADMIN_PRINCIPAL_ARNS }}
+  TF_VAR_cluster_editor_principal_arns: ${{ secrets.CLUSTER_EDITOR_PRINCIPAL_ARNS }}
 
 jobs:
   plan:
