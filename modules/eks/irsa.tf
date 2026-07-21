@@ -366,9 +366,11 @@ data "aws_iam_policy_document" "eso" {
   count = var.enable_app_irsa ? 1 : 0
 
   statement {
-    sid       = "ReadRdsMasterSecret"
-    effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
+    sid    = "ReadRdsMasterSecret"
+    effect = "Allow"
+    # DescribeSecret 선반영(7/21): ESO 가 값을 읽기 전 메타데이터를 조회하는 경로가 있어,
+    # 빠지면 첫 sync 가 조용히 실패하고 apply 왕복이 생긴다. 대상은 같은 시크릿 하나다.
+    actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
     resources = [var.rds_master_secret_arn]
   }
 
