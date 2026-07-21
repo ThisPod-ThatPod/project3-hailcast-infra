@@ -357,9 +357,10 @@ data "aws_iam_policy_document" "simulator" {
   }
 }
 
-# ── 10) eso - External Secrets 컨트롤러가 RDS 비번 시크릿을 읽는다 ──
-# RDS 자동생성 시크릿 하나만 GetSecretValue 한다. ESO 가 그 값을 hailcast 네임스페이스에
-# K8s Secret 으로 복제하면 call-api·worker·predict 가 환경변수로 읽는다(§5-4).
+# ── 10) eso - External Secrets 컨트롤러가 RDS 비번 시크릿과 DB 주소 파라미터를 읽는다 ──
+# 비번은 Secrets Manager(GetSecretValue), DB 주소는 Parameter Store(GetParameter) 각 1건.
+# ESO 가 두 값을 hailcast 네임스페이스의 K8s Secret 하나(hailcast-rds-secret)로 합치면
+# call-api·worker·predict 가 환경변수로 읽는다(§5-4 계약 표).
 # AWS 를 직접 부르는 앱 파드는 없다. 이 컨트롤러 하나뿐이다.
 data "aws_iam_policy_document" "eso" {
   count = var.enable_app_irsa ? 1 : 0
@@ -369,6 +370,13 @@ data "aws_iam_policy_document" "eso" {
     effect    = "Allow"
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [var.rds_master_secret_arn]
+  }
+
+  statement {
+    sid       = "ReadRdsEndpointParameter"
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter"]
+    resources = [var.rds_endpoint_param_arn]
   }
 }
 
@@ -397,7 +405,7 @@ locals {
     "weather-cron" = "weather-cron-sa: S3 weather/ 쓰기 전용(읽기 없음 · SQS·DynamoDB 없음)."
     keda           = "keda-operator: SQS 큐 길이 조회 전용(반응형 스케일 트리거)."
     simulator      = "simulator-sa: S3 simulator/ 쓰기 전용(status.json)."
-    eso            = "external-secrets: RDS 자동생성 비번 시크릿 GetSecretValue 전용."
+    eso            = "external-secrets: RDS 비번 시크릿 GetSecretValue + 엔드포인트 파라미터 GetParameter."
   }
 }
 
