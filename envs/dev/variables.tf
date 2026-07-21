@@ -73,16 +73,18 @@ variable "enable_night_shutdown" {
 variable "enable_edge" {
   description = <<-EOT
     엣지(Route53·CloudFront·ACM) 생성 스위치.
-    기본 false. 도메인이 준비되기 전에는 켜지 않는다. 켜도 alb_dns_name 이 비면 인증서만 만든다.
+    2026-07-21 기본 true 로 승격 — NS 위임 생존 확인 후 1단계(인증서) apply 완료.
+    CI 가 tfvars 없이 돌므로, 실물과 일치해야 하는 비밀 아닌 값은 tfvars 가 아니라 여기 기본값에 둔다.
+    켜도 alb_dns_name 이 비면 인증서만 만든다.
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "domain_name" {
-  description = "서비스 도메인. 예: hailcast.myminiinfra.store. 이 이름의 Route53 호스팅 영역이 이미 있어야 한다(edge 모듈이 data 로 조회한다). enable_edge = true 일 때 필수"
+  description = "서비스 도메인. 이 이름의 Route53 호스팅 영역이 이미 있어야 한다(edge 모듈이 data 로 조회한다). 비밀 아님(공개 DNS) → CI 정합 위해 기본값에 실값을 둔다."
   type        = string
-  default     = ""
+  default     = "hailcast.myminiinfra.store"
 }
 
 variable "alb_dns_name" {
