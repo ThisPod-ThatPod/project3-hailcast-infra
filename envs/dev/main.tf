@@ -120,3 +120,16 @@ module "edge" {
   domain_name  = var.domain_name
   alb_dns_name = var.alb_dns_name
 }
+
+# ── 야간 절전: 매일 02~10시 KST 에 노드그룹·RDS 를 내렸다 올린다 (§5-8 · 비용관리 런북) ──
+# 시간(cron)·복원 규모는 모듈 기본값 사용. Karpenter 잔존 Spot 노드 전제는 모듈 주석 참조.
+module "schedule" {
+  source = "../../modules/schedule"
+  count  = var.enable_night_shutdown ? 1 : 0
+
+  project_name    = var.project_name
+  environment     = var.environment
+  aws_region      = var.aws_region
+  cluster_name    = module.eks.cluster_name
+  node_group_name = module.eks.node_group_name
+}
