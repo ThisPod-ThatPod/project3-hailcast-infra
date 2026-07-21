@@ -6,6 +6,11 @@ output "rds_master_secret_arn" {
   value       = module.rds.master_secret_arn
 }
 
+output "rds_endpoint_param_arn" {
+  description = "RDS 엔드포인트 Parameter Store 파라미터 ARN. eks IRSA eso 가 ssm:GetParameter 대상으로 지목(§7)."
+  value       = aws_ssm_parameter.rds_endpoint.arn
+}
+
 output "prediction_log_table_arn" {
   description = "DynamoDB 오답노트 테이블 ARN. eks IRSA predict 가 쓰기 대상으로 지목(§7)."
   value       = aws_dynamodb_table.prediction_log.arn

@@ -69,6 +69,7 @@ module "eks" {
   # 오답노트 DynamoDB(predict 쓰기) · RDS 자동생성 시크릿(eso 읽기) 배선.
   prediction_log_table_arn = module.data.prediction_log_table_arn
   rds_master_secret_arn    = module.data.rds_master_secret_arn
+  rds_endpoint_param_arn   = module.data.rds_endpoint_param_arn
 }
 
 # ── 스토리지: app 이미지용 ECR 레포(call-api·predict·weather-cron·worker) + S3 ──

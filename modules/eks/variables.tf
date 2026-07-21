@@ -102,10 +102,11 @@ variable "enable_app_irsa" {
   # 여기서 미리 사람이 읽을 수 있는 말로 세워둔다. (교차 변수 참조는 Terraform 1.9+ 기능,
   # 루트가 required_version >= 1.11 이라 안전하다.)
   #
-  # 강제하는 건 4종이다. prediction_log_table_arn(오답노트)은 뺐다.
-  #    넷 다 '없으면 앱이 실제로 죽는' 권한이다 — S3 없으면 모델 로드 실패, 콜 큐 없으면
+  # 강제하는 건 5종이다. prediction_log_table_arn(오답노트)은 뺐다.
+  #    다섯 다 '없으면 앱이 실제로 죽는' 권한이다 — S3 없으면 모델 로드 실패, 콜 큐 없으면
   #    call-api·worker 가 멈추고, 중단 큐 없으면 Karpenter 가 Spot 경고를 못 받고,
-  #    RDS 시크릿 없으면 eso 가 비번을 못 읽어 DB 접속이 통째로 막힌다.
+  #    RDS 시크릿 없으면 eso 가 비번을, 엔드포인트 파라미터 없으면 DB_HOST 를 못 읽어
+  #    DB 접속이 통째로 막힌다.
   #    오답노트는 다르다. 규약서 §5-3 이 인정하듯 '쓰는 앱 코드가 아직 0건'이라 권한이 없어도
   #    아무도 죽지 않는다. 그런데 이걸 함께 강제하면, 아무도 안 쓰는 테이블 하나가
   #    'karpenter' 역할까지 인질로 잡는다(같은 스위치에 묶여 있으므로) → 노드 공급이 막힌다.
@@ -116,8 +117,9 @@ variable "enable_app_irsa" {
       var.sqs_call_queue_arn != null,
       var.karpenter_interruption_queue_arn != null,
       var.rds_master_secret_arn != null,
+      var.rds_endpoint_param_arn != null,
     ])
-    error_message = "enable_app_irsa = true 로 켜려면 ARN 4종(model_bucket_arn · sqs_call_queue_arn · karpenter_interruption_queue_arn · rds_master_secret_arn)을 주입해야 합니다. (prediction_log_table_arn 은 선택 — 주입하면 predict 에 오답노트 쓰기 권한이 붙습니다.)"
+    error_message = "enable_app_irsa = true 로 켜려면 ARN 5종(model_bucket_arn · sqs_call_queue_arn · karpenter_interruption_queue_arn · rds_master_secret_arn · rds_endpoint_param_arn)을 주입해야 합니다. (prediction_log_table_arn 은 선택 — 주입하면 predict 에 오답노트 쓰기 권한이 붙습니다.)"
   }
 }
 
@@ -153,6 +155,12 @@ variable "prediction_log_table_arn" {
 
 variable "rds_master_secret_arn" {
   description = "RDS 자동생성 마스터 비번 시크릿 ARN (data output). eso IRSA 가 GetSecretValue 로 읽어 K8s Secret 으로 동기화한다(§5-4)."
+  type        = string
+  default     = null
+}
+
+variable "rds_endpoint_param_arn" {
+  description = "RDS 엔드포인트 파라미터 ARN (data output). eso IRSA 가 ssm:GetParameter 로 읽어 같은 K8s Secret 에 DB_HOST 로 병합한다(§5-4 계약 표)."
   type        = string
   default     = null
 }
