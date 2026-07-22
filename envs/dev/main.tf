@@ -102,8 +102,8 @@ module "cicd" {
 
 # ── Y7 엣지 — Route53 + CloudFront ──────────────────────────
 # 트랙 맨 끝: ALB(배포팀 Ingress)가 떠야 오리진을 연결할 수 있다.
-#   enable_edge = false  → 리소스 0개 (기본. 다른 팀 apply 를 막지 않는다)
-#   enable_edge = true   → ACM 인증서 2종 발급 (ALB 없어도 됨)
+#   enable_edge = true   → ACM 인증서 2종 발급 (기본 · 2026-07-21 승격. ALB 없어도 됨)
+#   enable_edge = false  → 리소스 0개. 발급된 인증서를 지운다는 뜻이라 되돌리면 ARN 이 바뀐다
 #   + alb_dns_name 채움  → CloudFront·레코드까지 생성
 module "edge" {
   source = "../../modules/edge"
