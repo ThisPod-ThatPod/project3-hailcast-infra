@@ -202,6 +202,8 @@ data "aws_iam_policy_document" "tf_apply" {
       "autoscaling:*",             # 노드그룹 ASG
       "application-autoscaling:*", # 스케일링 정책
       "cloudwatch:*",              # 알람·지표
+      "athena:*",                  # OpenCost Level 2 — CUR 조회용 워크그룹
+      "glue:*",                    # OpenCost Level 2 — CUR 데이터 카탈로그(DB·테이블)
       "tag:*",                     # 태그 조회
       "sts:GetCallerIdentity",
     ]
@@ -239,6 +241,12 @@ data "aws_iam_policy_document" "tf_apply" {
   }
 
   # 조직·결제·계정 설정은 terraform 소관이 아니다. 사고 반경을 줄인다.
+  #
+  # ⭐ OpenCost Level 2 는 이 경계를 안 건드리고 통과한다.
+  #    CUR 정의를 만드는 권한(cur:·bcm-data-exports:)은 아래 Deny 에 직접 걸리지는 않지만
+  #    Allow 에도 넣지 않았다 — 결제 영역은 IaC 밖에 둔다(규약서 §5-9 · 팀 승인 2026-07-23).
+  #    Terraform 이 맡는 것은 조회 계층(athena·glue)과 저장소(S3)뿐이고,
+  #    CUR 정의는 Budgets 와 같은 자리에서 사람이 만든다.
   statement {
     sid    = "DenyOrgAndBilling"
     effect = "Deny"
