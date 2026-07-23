@@ -32,6 +32,25 @@ resource "aws_eks_cluster" "this" {
   tags = merge(var.tags, { Name = "${local.name_prefix}-eks" })
 }
 
+# ── 클러스터 SG 에 karpenter discovery 태그 (§6-1) ──
+# 이 SG 는 EKS 가 클러스터를 만들 때 자동 생성한다. Terraform 이 만든 게 아니라
+# default_tags 도 tags 블록도 닿지 않아, 태그만 aws_ec2_tag 로 따로 붙인다.
+#
+# ⚠️ 이 태그가 없으면 Karpenter 노드가 클러스터에 등록되지 못한다.
+#    클러스터 SG 의 인바운드는 self(자기 SG) 허용뿐이라, 이 SG 를 단 대상끼리만 통한다.
+#    System 노드그룹은 launch template 이 두 SG 를 명시 부착해서(nodegroup.tf:49-52)
+#    통하지만, Karpenter 노드는 LT 를 안 쓰고 EC2NodeClass 의
+#    securityGroupSelectorTerms 로 '태그 검색해 찾은 SG 만' 단다. 태그가 노드 SG 에만 있으면
+#    Karpenter 노드는 노드 SG 하나만 달고 뜨고 → kubelet 이 컨트롤플레인 443 에 닿지 못해
+#    등록 타임아웃(15분) 후 인스턴스가 회수된다.
+#    조용히 죽는다: Karpenter 로그엔 launched nodeclaim 만 찍히고 인스턴스는 running 이며
+#    SSM 도 붙는다. kubectl get nodes 에만 안 보이고 파드는 계속 Pending 이다.
+resource "aws_ec2_tag" "cluster_sg_karpenter_discovery" {
+  resource_id = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
+  key         = "karpenter.sh/discovery"
+  value       = local.name_prefix # = hailcast-dev (§6-1 · 노드 SG·서브넷 태그와 같은 값)
+}
+
 # ── OIDC provider (IRSA 전제) ──
 # 클러스터가 발급한 issuer 로 IAM OIDC provider 를 만들어야 파드가 IRSA(제한된 사원증)를 받는다.
 # issuer 의 TLS 지문을 동적으로 계산(cicd 모듈의 tls 패턴 재사용) → 지문 하드코딩/만료 걱정 없음.
