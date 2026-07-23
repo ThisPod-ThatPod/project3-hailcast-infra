@@ -137,6 +137,28 @@ output "model_bucket_name" {
   value       = module.storage.model_bucket_name
 }
 
+# CUR 버킷 이름은 랜덤 접미사 때문에 apply 전에는 알 수 없다.
+# 사람이 CLI 로 CUR 정의를 만들 때 이 값으로 버킷을 지목한다(명령은 규약서 §5-9).
+output "cur_bucket_name" {
+  description = "CUR 저장 버킷 이름. CUR 정의를 만들 때 지목할 버킷"
+  value       = module.storage.cur_bucket_name
+}
+
+output "cur_bucket_arn" {
+  description = "CUR 저장 버킷 ARN (Athena 와, 앞으로 만들 OpenCost IRSA 가 소비)"
+  value       = module.storage.cur_bucket_arn
+}
+
+output "cur_prefix" {
+  description = "CUR 정의에 입력할 S3 프리픽스"
+  value       = module.storage.cur_prefix
+}
+
+output "athena_results_location" {
+  description = "Athena 쿼리 결과를 둘 위치(s3:// URI). 이 값을 쓸 Workgroup 은 아직 없다"
+  value       = module.storage.athena_results_location
+}
+
 output "alb_certificate_arn" {
   description = "배포팀이 Ingress annotation(alb.ingress.kubernetes.io/certificate-arn)에 넣을 값"
   value       = var.enable_edge ? module.edge[0].alb_certificate_arn : ""
