@@ -23,10 +23,13 @@ variable "repositories" {
 }
 
 # 보관할 태그 이미지 개수. 초과분은 오래된 것부터 자동 만료(비용 통제).
+# GitOps 밖에서 도는 파드(weather-cron·simulator·frontend)는 옛 태그에 고정돼 있어,
+# 자기 소스가 안 바뀌어도 backend/common 변경분에 밀려 그 태그가 만료된다.
+# 매니페스트 편입 전까지의 안전판으로 여유를 둔다.
 variable "image_keep_count" {
   description = "레포당 보관할 최신 태그 이미지 개수(초과분 자동 삭제)."
   type        = number
-  default     = 10
+  default     = 30
 }
 
 variable "tags" {
