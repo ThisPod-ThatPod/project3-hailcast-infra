@@ -35,3 +35,30 @@ variable "tags" {
   default     = {}
 }
 
+
+# ── CUR (OpenCost Cloud Costs · Level 2) ──
+# 프리픽스 값은 사람이 콘솔에서 CUR 정의를 만들 때 그대로 입력해야 한다(규약서 §5-9).
+# 여기 값과 콘솔 입력이 어긋나면 lifecycle 규칙이 엉뚱한 경로에 걸려 아무것도 만료되지 않는다.
+variable "cur_prefix" {
+  description = "CUR 정의가 파일을 떨어뜨릴 S3 프리픽스. 콘솔 입력값과 같아야 한다."
+  type        = string
+  default     = "cur"
+}
+
+variable "athena_results_prefix" {
+  description = "Athena 쿼리 결과 저장 프리픽스. 별도 버킷을 만들지 않고 CUR 버킷 안에 둔다."
+  type        = string
+  default     = "athena-results"
+}
+
+variable "cur_retention_days" {
+  description = "CUR 원본 보관 일수. Athena 스캔량과 S3 요금이 보관 기간에 비례한다."
+  type        = number
+  default     = 90
+}
+
+variable "athena_results_retention_days" {
+  description = "Athena 쿼리 결과 보관 일수. OpenCost 가 주기 조회하므로 짧게 둔다."
+  type        = number
+  default     = 7
+}

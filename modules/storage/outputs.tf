@@ -21,3 +21,23 @@ output "model_bucket_arn" {
   description = "모델 버킷 ARN (IRSA 정책 참조)"
   value       = aws_s3_bucket.model_bucket.arn
 }
+
+output "cur_bucket_name" {
+  description = "CUR 저장 버킷 이름. CUR 정의를 만들 때 이 버킷을 지목한다."
+  value       = aws_s3_bucket.cur.id
+}
+
+output "cur_bucket_arn" {
+  description = "CUR 저장 버킷 ARN. Athena 와, 앞으로 만들 OpenCost IRSA 가 참조한다."
+  value       = aws_s3_bucket.cur.arn
+}
+
+output "cur_prefix" {
+  description = "CUR 정의에 입력할 S3 프리픽스."
+  value       = var.cur_prefix
+}
+
+output "athena_results_location" {
+  description = "Athena 쿼리 결과를 둘 위치(s3:// URI). 이 값을 쓸 Workgroup 은 아직 없다 — Level 2 다음 단계에서 만든다."
+  value       = "s3://${aws_s3_bucket.cur.id}/${var.athena_results_prefix}/"
+}
