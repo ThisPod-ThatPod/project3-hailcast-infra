@@ -15,8 +15,7 @@ cluster_editor_principal_arns = [
 #    같은 principal 이 두 access entry 에 들어가면 apply 가 실패합니다.
 
 # ── 엣지 (Y7) ──────────────────────────────
-# 1단계: 도메인 준비 후 enable_edge = true → 인증서만 발급 (ALB 없어도 됨)
-# 2단계: 배포팀이 Ingress 올린 뒤 alb_dns_name 채움 → CloudFront 생성
-enable_edge  = false
-domain_name  = "hailcast.myminiinfra.store"
-alb_dns_name = "" # kubectl get ingress -n hailcast 로 얻은 ADDRESS
+# enable_edge · domain_name · alb_dns_name 은 여기 적지 마십시오.
+# 세 값 모두 루트 변수 기본값에 실값이 있습니다 (CI 가 tfvars 없이 도는 탓 · 규약서 §5-6).
+# tfvars 로 덮으면 기본값을 무력화해 ACM 인증서 2종·CloudFront·서비스 레코드 3종이
+# 전부 destroy 대상이 됩니다.
