@@ -88,7 +88,10 @@ variable "domain_name" {
 }
 
 variable "alb_dns_name" {
-  description = "배포팀 Ingress 가 만든 ALB DNS. 비면 CloudFront 를 만들지 않는다"
+  description = <<-EOT
+    배포팀 Ingress 가 만든 ALB DNS. 비면 CloudFront 를 만들지 않는다.
+    비밀 아님(공개 DNS) → CI 정합 위해 기본값에 실값을 둔다.
+  EOT
   type        = string
-  default     = ""
+  default     = "k8s-hailcastdev-6ad81285b1-452291380.ap-northeast-2.elb.amazonaws.com"
 }

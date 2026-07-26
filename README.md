@@ -44,7 +44,7 @@ project3-hailcast-infra/
 │   ├── eks/                 # 클러스터, 시스템 노드그룹, OIDC, IRSA, access entry
 │   ├── data/                # RDS, SQS 콜 큐, Karpenter 중단 큐, DynamoDB, Parameter Store
 │   ├── cicd/                # GitHub Actions OIDC 역할 (ECR push, tf plan, tf apply)
-│   └── edge/                # Route53, ACM, CloudFront (enable_edge 스위치, 기본 false)
+│   └── edge/                # Route53, ACM, CloudFront (enable_edge 스위치, 기본 true)
 ├── docs/
 │   ├── 네이밍규약서.md      # 모든 이름과 팀 계약의 단일 진실원천(SSOT)
 │   └── 비용관리.md          # 예산, 태그 커버리지, destroy 순서 런북
@@ -61,7 +61,7 @@ VPC `10.0.0.0/16`, AZ 2a와 2c.
 
 | 계층 | 구성 |
 | --- | --- |
-| 진입 | ALB(배포팀 Ingress가 생성). `enable_edge`를 켜면 Route53, ACM, CloudFront가 앞단에 붙는다(NS 위임 선행 조건) |
+| 진입 | ALB(배포팀 Ingress가 생성). 그 앞단에 Route53, ACM, CloudFront(`enable_edge` 기본 true, NS 위임과 ALB가 선행 조건) |
 | 컴퓨트 | EKS. 시스템 노드그룹(관리형)에 플랫폼 파드, 앱 파드는 Karpenter가 공급하는 Spot 노드에 |
 | 데이터 | S3(모델, 날씨, 트래픽 샤드), RDS PostgreSQL Single-AZ(콜, 예측, 스케일링 이력), DynamoDB(오답노트), SQS(콜 큐와 Karpenter 중단 큐), Secrets Manager(RDS 자동 생성 비번), Parameter Store(RDS 엔드포인트) |
 | 접근, 보안 | SSH 인바운드 없음(SSM Session Manager). RDS 5432는 노드 SG에서 온 것만. 파드 권한은 IRSA로 역할별 분리 |
