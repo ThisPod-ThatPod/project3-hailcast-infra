@@ -65,3 +65,15 @@ variable "athena_results_retention_days" {
   type        = number
   default     = 7
 }
+
+variable "traffic_shard_retention_days" {
+  description = "아티팩트 버킷 traffic/instances/ 샤드 보관 일수. 없어진 파드의 샤드를 앱이 지우지 않아 여기서 정리한다."
+  type        = number
+  default     = 1
+}
+
+variable "noncurrent_version_retention_days" {
+  description = "아티팩트 버킷 상태 파일의 옛 버전 보관 일수. 버저닝이 켜져 있어서 덮어쓸 때마다 쌓인다."
+  type        = number
+  default     = 1
+}
