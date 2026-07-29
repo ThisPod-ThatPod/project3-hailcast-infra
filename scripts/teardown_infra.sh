@@ -118,7 +118,11 @@ if [ -n "$CUR_BUCKET" ]; then
                         module.storage.aws_s3_bucket_server_side_encryption_configuration.cur
                         module.storage.random_id.cur_suffix
                     )
-                    STATE_LIST="$(terraform state list 2>/dev/null || true)"
+                    if ! STATE_LIST="$(terraform state list 2>&1)"; then
+                        err "terraform state list 조회 실패 — state 잠금 또는 자격증명을 확인하세요"
+                        err "$STATE_LIST"
+                        exit 1
+                    fi
                     TO_RM=()
                     for addr in "${CUR_ADDRS[@]}"; do
                         if grep -qxF "$addr" <<< "$STATE_LIST"; then
