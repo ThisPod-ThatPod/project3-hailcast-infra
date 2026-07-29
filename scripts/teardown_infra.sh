@@ -54,7 +54,48 @@ fi
 
 info "terraform destroy 준비 ($TARGET_DIR)"
 
-# ── ① CUR 버킷 가드 — 의존성 그래프상 가장 먼저 막히는 지점 ──────────
+# ── ① ALB 잔여 가드 : '조회 실패' 와 'ALB 없음' 을 구분한다 ──────────
+# [7/29 이미선 리뷰 반영] CUR 가드는 여기서 제거 — terraform state rm이 backend 초기화를
+# 요구하므로 terraform init(아래) 뒤로 옮김. ALB·Karpenter 가드는 aws cli 조회뿐이라
+# init 여부와 무관해 순서를 바꿔도 잃는 게 없다.
+if ! LEFT_ALB=$(aws elbv2 describe-load-balancers --region "$AWS_REGION" \
+        --query "LoadBalancers[?contains(LoadBalancerName,'k8s')].LoadBalancerName" \
+        --output text); then
+    err "ALB 조회 실패 (자격증명·권한·리전 확인). 안전을 위해 중단합니다."
+    exit 1
+fi
+if [ -n "$LEFT_ALB" ]; then
+    warn "K8s가 만든 ALB가 아직 있습니다: $LEFT_ALB"
+    warn "  manifest teardown을 먼저 끝내세요. ENI가 남아 VPC destroy가 막힙니다."
+    if [ "$CONFIRM" = "yes" ] && [ "$FORCE" != "yes" ]; then
+        err "실제 destroy를 중단합니다. (경고를 알고도 강행하려면 FORCE=yes)"
+        exit 1
+    fi
+fi
+
+# ── ② Karpenter 노드 잔여 가드 ────────────────────────────────────
+KARPENTER_NODES=$(aws ec2 describe-instances --region "$AWS_REGION" \
+    --filters "Name=tag-key,Values=karpenter.sh/nodepool" "Name=instance-state-name,Values=running" \
+    --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null || echo "")
+if [ -n "$KARPENTER_NODES" ]; then
+    warn "Karpenter 노드가 아직 살아있습니다: $KARPENTER_NODES"
+    warn "  manifest teardown이 경로 B(kubectl)였다면 karpenter Application에 finalizer가 없어"
+    warn "  노드가 자동으로 안 지워집니다. 이대로 destroy하면 ENI가 서브넷 삭제를 막습니다."
+    if [ "$CONFIRM" = "yes" ] && [ "$FORCE" != "yes" ]; then
+        err "실제 destroy를 중단합니다."
+        err "  강행하려면 FORCE=yes, 또는 먼저: aws ec2 terminate-instances --instance-ids $KARPENTER_NODES"
+        exit 1
+    fi
+fi
+
+cd "$TARGET_DIR"
+terraform init -input=false               # 새 clone 에서도 destroy 가 되도록 (멱등)
+                                           # ↑ CUR state rm이 이 초기화를 전제하므로 반드시 이 뒤에 와야 한다.
+
+# ── ③ CUR 버킷 가드 — 의존성 그래프상 가장 먼저 막히는 지점(단, 처리는 init 이후) ──
+# [7/29 이미선 리뷰 반영] 원래 계정가드 직후(구 57-95행)에 있었으나, terraform state rm이
+# backend 초기화(위 terraform init)를 요구해서 그 앞에서 실행되면 "Backend initialization
+# required"로 즉시 실패했다(새 clone 기준) / 재실행 시에도 같은 지점에서 반복 실패했다.
 CUR_BUCKET=$(aws s3api list-buckets --region "$AWS_REGION" \
     --query "Buckets[?starts_with(Name,'hailcast-dev-cur')].Name" --output text 2>/dev/null || echo "")
 if [ -n "$CUR_BUCKET" ]; then
@@ -66,15 +107,31 @@ if [ -n "$CUR_BUCKET" ]; then
             keep)
                 info "CUR_HANDLING=keep → terraform state rm으로 IaC 밖으로 뺍니다"
                 if [ "$CONFIRM" = "yes" ]; then
-                    aws cur delete-report-definition --report-name hailcast-dev-cur --region us-east-1 || true
-                    ( cd "$TARGET_DIR" && terraform state rm \
-                        module.storage.aws_s3_bucket.cur \
-                        module.storage.aws_s3_bucket_policy.cur \
-                        module.storage.aws_s3_bucket_lifecycle_configuration.cur \
-                        module.storage.aws_s3_bucket_public_access_block.cur \
-                        module.storage.aws_s3_bucket_server_side_encryption_configuration.cur \
-                        module.storage.random_id.cur_suffix )
-                    info "CUR 버킷을 IaC 밖 자원으로 전환 완료 — 규약서 5-9절에 기록할 것"
+                    # [7/29 방어 추가] state에 실제로 있는 주소만 rm 대상으로 거른다.
+                    # 이미 한 번 rm된 상태(재실행)라면 대상이 없어 "Invalid target address"로
+                    # exit 1이 나므로, state list로 존재를 먼저 확인하고 없으면 건너뛴다.
+                    CUR_ADDRS=(
+                        module.storage.aws_s3_bucket.cur
+                        module.storage.aws_s3_bucket_policy.cur
+                        module.storage.aws_s3_bucket_lifecycle_configuration.cur
+                        module.storage.aws_s3_bucket_public_access_block.cur
+                        module.storage.aws_s3_bucket_server_side_encryption_configuration.cur
+                        module.storage.random_id.cur_suffix
+                    )
+                    STATE_LIST="$(terraform state list 2>/dev/null || true)"
+                    TO_RM=()
+                    for addr in "${CUR_ADDRS[@]}"; do
+                        if grep -qxF "$addr" <<< "$STATE_LIST"; then
+                            TO_RM+=("$addr")
+                        fi
+                    done
+                    if [ "${#TO_RM[@]}" -gt 0 ]; then
+                        aws cur delete-report-definition --report-name hailcast-dev-cur --region us-east-1 || true
+                        terraform state rm "${TO_RM[@]}"
+                        info "CUR 버킷을 IaC 밖 자원으로 전환 완료 — 규약서 5-9절에 기록할 것"
+                    else
+                        info "CUR 관련 주소가 state에 이미 없음 — 이전에 처리됨, 건너뜀"
+                    fi
                 else
                     info "  (미실행 — CONFIRM=yes일 때 state rm 수행)"
                 fi
@@ -93,40 +150,6 @@ if [ -n "$CUR_BUCKET" ]; then
         esac
     fi
 fi
-
-# ── ② ALB 잔여 가드 : '조회 실패' 와 'ALB 없음' 을 구분한다 ──────────
-if ! LEFT_ALB=$(aws elbv2 describe-load-balancers --region "$AWS_REGION" \
-        --query "LoadBalancers[?contains(LoadBalancerName,'k8s')].LoadBalancerName" \
-        --output text); then
-    err "ALB 조회 실패 (자격증명·권한·리전 확인). 안전을 위해 중단합니다."
-    exit 1
-fi
-if [ -n "$LEFT_ALB" ]; then
-    warn "K8s가 만든 ALB가 아직 있습니다: $LEFT_ALB"
-    warn "  manifest teardown을 먼저 끝내세요. ENI가 남아 VPC destroy가 막힙니다."
-    if [ "$CONFIRM" = "yes" ] && [ "$FORCE" != "yes" ]; then
-        err "실제 destroy를 중단합니다. (경고를 알고도 강행하려면 FORCE=yes)"
-        exit 1
-    fi
-fi
-
-# ── ③ Karpenter 노드 잔여 가드 ────────────────────────────────────
-KARPENTER_NODES=$(aws ec2 describe-instances --region "$AWS_REGION" \
-    --filters "Name=tag-key,Values=karpenter.sh/nodepool" "Name=instance-state-name,Values=running" \
-    --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null || echo "")
-if [ -n "$KARPENTER_NODES" ]; then
-    warn "Karpenter 노드가 아직 살아있습니다: $KARPENTER_NODES"
-    warn "  manifest teardown이 경로 B(kubectl)였다면 karpenter Application에 finalizer가 없어"
-    warn "  노드가 자동으로 안 지워집니다. 이대로 destroy하면 ENI가 서브넷 삭제를 막습니다."
-    if [ "$CONFIRM" = "yes" ] && [ "$FORCE" != "yes" ]; then
-        err "실제 destroy를 중단합니다."
-        err "  강행하려면 FORCE=yes, 또는 먼저: aws ec2 terminate-instances --instance-ids $KARPENTER_NODES"
-        exit 1
-    fi
-fi
-
-cd "$TARGET_DIR"
-terraform init -input=false               # 새 clone 에서도 destroy 가 되도록 (멱등)
 
 # ── ★ (선택) RDS 데이터 보존이 필요하면 destroy 전에 수동 스냅샷 ──
 #   RDS는 skip_final_snapshot=true라 destroy 시 자동 스냅샷이 없다(dev 데모 기본값).
