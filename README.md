@@ -1,239 +1,158 @@
 # project3-hailcast-infra
 
-> **hailcast** — AI 수요 예측 기반 오토스케일링 & FinOps 클라우드 인프라
-> 날씨·시간 패턴으로 택시 호출 수요를 미리 예측해, 트래픽이 몰리기 **전에** 파드를 선제 확장하고 한산해지면 회수하는 예측형 자율 운영 인프라.
->
-> Org: `ThisPod-ThatPod` · 리전: `ap-northeast-2`(서울) · 담당: 이미선, 유현상
+> hailcast: AI 수요 예측 기반 예측형 오토스케일링과 FinOps 프로젝트의 Terraform(IaC) 레포
+> Org `ThisPod-ThatPod` / 리전 `ap-northeast-2`(서울) / 담당 이미선
 
----
+## 1. 무엇을 만드는 레포인가
 
-## 1. 프로젝트 한눈에
-
-하나의 **닫힌 제어 루프**를 다섯 관점으로 구현한다.
+날씨와 시간 패턴으로 택시 호출 수요를 미리 예측해, 트래픽이 몰리기 전에 파드를 늘리고
+한산해지면 회수하는 시스템의 AWS 토대를 Terraform으로 만든다.
 
 ```
-관측(Prometheus) → 예측(LightGBM) → 실행(KEDA·Karpenter) → 검증(Grafana·OpenCost) → 재예측
+관측(Prometheus) → 예측(LightGBM) → 실행(KEDA, Karpenter) → 검증(Grafana, OpenCost) → 재예측
 ```
 
-- **선제 예측 스케일링** — 예측값을 KEDA가 읽어 트래픽 전 파드 확장, 노드 부족 시 Karpenter가 EC2 공급
-- **반응형 안전망** — 예측이 빗나가도 HPA(CPU/큐 기준)가 즉시 받침
-- **GitOps** — Terraform(IaC) + GitHub Actions(CI) + ArgoCD(CD)
-- **FinOps** — OpenCost로 비용 계측, 예측형 vs 반응형 절감폭을 시뮬레이션 수치로 제시
+- 선제 스케일링: predict가 예측값으로 KEDA ScaledObject의 minReplicaCount를 미리 올린다
+- 반응형 안전망: KEDA가 SQS 콜 큐 길이를 직접 읽어, 예측이 빗나가도 즉시 받친다
+- 노드 공급: 파드가 늘어 자리가 모자라면 Karpenter가 EC2(Spot)를 공급하고 한산하면 회수한다
 
-> **정직성 선언:** 실서비스가 아니다. "실측 절감"이 아니라 설계·구현 + 시뮬레이션 기대효과로 제시한다.
+이 레포는 그 토대(VPC, EKS, IRSA, 데이터 저장소, CI 역할)까지만 만든다.
+애드온 설치(KEDA, Karpenter, ArgoCD, ALB Controller)와 배포는 manifests 레포(ArgoCD) 소관이다.
+인프라 Terraform에서 helm_release로 설치하면 ArgoCD와 소유권이 갈려 drift가 생긴다.
 
----
+정직성 선언: 실서비스가 아니다. 실측 절감이 아니라 설계와 구현, 시뮬레이션 기대효과로 제시한다.
 
-## 2. 레포 구조 (3-레포)
+## 2. 레포 구조 (4-레포)
 
-레포는 **배포 방식이 다르면 나눈다**는 기준으로 셋으로 분리한다.
+배포 방식이 다르면 레포를 나눈다.
 
-| 레포 | 배포 방식 | 담당 |
+| 레포 | 배포 방식 | 소관 |
 | --- | --- | --- |
 | `project3-hailcast-infra` (이 레포) | `terraform apply` | 인프라 |
-| `project3-hailcast-app` | `docker build → ECR push` | 앱·ML |
-| `project3-hailcast-manifests` | ArgoCD가 pull(GitOps) | 통합 |
+| `project3-hailcast-app` | `docker build` 후 ECR push | 앱, ML |
+| `project3-hailcast-manifests` | ArgoCD가 pull (GitOps) | 배포 |
+| `project3-hailcast-ops` | 배포 대상 아님 | 팀 공용 운영 도구(setup, check, teardown). 팀장 소유 |
 
-**이 레포 내부 폴더**
+이 레포 내부:
 
 ```
 project3-hailcast-infra/
-├── envs/dev/                  # 조립·상태 (backend.tf, main.tf, variables.tf, terraform.tfvars)
+├── envs/dev/                # 조립과 상태 (backend.tf, main.tf, variables.tf, outputs.tf 등)
 ├── modules/
-│   ├── network/               # VPC·서브넷·NAT·라우팅
-│   ├── storage/               # S3·ECR
-│   ├── eks/                    # 클러스터·OIDC·Karpenter·IRSA (OIDC 의존 → 한 몸)
-│   └── data/                   # RDS·SQS·DynamoDB·Karpenter 중단 큐·Secrets·Parameter Store
+│   ├── network/             # VPC, 서브넷, NAT, 라우팅, 게이트웨이 엔드포인트(S3, DynamoDB)
+│   ├── storage/             # S3 모델 버킷, S3 CUR 버킷, ECR
+│   ├── eks/                 # 클러스터, 시스템 노드그룹, OIDC, IRSA, access entry
+│   ├── data/                # RDS, SQS 콜 큐, Karpenter 중단 큐, DynamoDB, Parameter Store
+│   ├── cicd/                # GitHub Actions OIDC 역할 (ECR push, tf plan, tf apply)
+│   ├── edge/                # Route53, ACM, CloudFront (enable_edge 스위치, 기본 true)
+│   └── schedule/            # 야간 절전 EventBridge Scheduler (enable_night_shutdown 스위치, 기본 true)
 ├── docs/
-│   └── 네이밍규약서.md        # 전체 네이밍 사전 (이름의 단일 진실원천)
+│   ├── 네이밍규약서.md      # 모든 이름과 팀 계약의 단일 진실원천(SSOT)
+│   └── 비용관리.md          # 예산, 태그 커버리지, destroy 순서 런북
+├── scripts/teardown_infra.sh
+├── Makefile                 # init, fmt, validate, plan, apply, teardown 등
 └── .github/workflows/terraform.yml
 ```
 
----
+## 3. 아키텍처 요약
 
-## 3. 아키텍처 요약 (Multi-AZ 4계층)
+![전체 아키텍처](./docs/images/architecture.png)
 
-VPC `10.0.0.0/16` · AZ `2a·2c` 기준.
+VPC `10.0.0.0/16`, AZ 2a와 2c.
 
 | 계층 | 구성 |
 | --- | --- |
-| 엣지/진입 | (CloudFront) → **ALB**(Ingress) + ALB Controller |
-| 컴퓨트 (EKS·Private) | 콜 API · 워커 · 예측 · CronJob 3종 · addons(KEDA·HPA·Karpenter·ArgoCD) |
-| 데이터/관리형 | **S3**(모델·예측JSON) · ECR · SQS(콜 큐) · **RDS PostgreSQL(Single-AZ)** · DynamoDB(오답노트) · Secrets Manager |
-| 접근/보안 | **SSM Session Manager**(Bastion 대체, zero-inbound) · IAM/IRSA 최소 권한 |
+| 진입 | ALB(배포팀 Ingress가 생성). 그 앞단에 Route53, ACM, CloudFront(`enable_edge` 기본 true, NS 위임과 ALB가 선행 조건) |
+| 컴퓨트 | EKS. 시스템 노드그룹(관리형)에 플랫폼 파드, 앱 파드는 Karpenter가 공급하는 Spot 노드에 |
+| 데이터 | S3(모델, 날씨, 트래픽 샤드), RDS PostgreSQL Single-AZ(콜, 예측, 스케일링 이력), DynamoDB(오답노트), SQS(콜 큐와 Karpenter 중단 큐), Secrets Manager(RDS 자동 생성 비번), Parameter Store(RDS 엔드포인트) |
+| 비용 | S3 CUR 버킷(AWS 청구 리포트와 Athena 쿼리 결과). OpenCost가 실청구액을 읽는 경로다 |
+| 접근, 보안 | SSH 인바운드 없음(SSM Session Manager). RDS 5432는 노드 SG에서 온 것만. 파드 권한은 IRSA로 역할별 분리 |
 
-> **변경 이력:** ElastiCache(Redis)는 **제거**했다. 예측 결과는 Prometheus(시계열)와 DynamoDB로 충분히 커버되어, 상시 과금 캐시 계층이 불필요하다고 판단(FinOps).
+노드와 서브넷 배치 상세:
 
----
+![클러스터 구성도](./docs/images/cluster-topology.png)
 
-## 4. 협업 규약 (GitHub)
+## 4. 설계 하이라이트
 
-### 4-1. 권한은 최소로 — 두 체계를 구분
+- 스케일링을 3층으로 나눴다. 예측(선제)이 minReplicaCount를 미리 올리고, 예측이 빗나가면
+  KEDA의 큐 길이 트리거(반응형)가 받치고, 파드가 늘어 자리가 모자라면 Karpenter가 노드를 공급한다.
+  한 층의 실패가 서비스 중단으로 바로 이어지지 않는다.
+- 파드 권한을 S3 프리픽스 단위로 갈랐다. 대표로 predict에 모델 경로 쓰기를 주지 않는다.
+  앱이 S3의 pickle을 그대로 로드하므로 그 경로에 쓸 수 있으면 원격 코드 실행이 된다.
+- RDS 비밀번호를 사람과 저장소에서 치웠다. RDS가 Secrets Manager에 자동 생성하고
+  ESO가 클러스터의 K8s Secret으로 복제한다. tfvars와 CI 변수, git 어디에도 비밀번호가 없다.
+- CI 권한을 plan과 apply로 갈랐다. plan은 읽기 전용(tfstate 잠금 파일 쓰기만 예외)으로 PR마다 자동이고, apply는
+  environment 승인을 거친 dev 브랜치 전용이다. apply 역할의 방어선은 IAM 정책이 아니라
+  신뢰정책이다(environment, 워크플로 파일, 브랜치를 고정).
+- 비용을 설계 범위에 넣었다. 전 리소스 비용 태그, 예산 경보, K8s가 만든 자원까지 걷어내는
+  teardown 순서 런북(비용관리.md)까지를 인프라가 책임진다.
+- 개발 기간 비용은 스케줄로 줄인다. EventBridge Scheduler가 Lambda 없이 AWS API를 직접 불러
+  매일 KST 02~10시에 시스템 노드그룹과 RDS를 내렸다 올린다(`enable_night_shutdown`, 기본 true).
+  서비스 기능이 아니라 학습 기간 예산 장치다.
 
-| 체계 | 정하는 것 | 비유 |
-| --- | --- | --- |
-| Organization Role (Owner/Member) | 조직 전체 관리 |
-| Repository Role (Read/Write/Admin) | 레포 하나에서 할 수 있는 일 |
+## 5. 협업 규약
 
-### 4-2. main 브랜치 보호 (레포마다 동일)
+- 브랜치: `main`(보호) ← `dev`(통합, PR + 승인 1) ← `feature/*`
+- 승인 수는 전 레포 1이다. infra만 2로 올리는 안이 있었으나 인원 재편으로 리뷰 가능 인원이 줄어 폐기했다
+- 커밋: `Type(scope): 제목` 형식. 예: `Feat(eks): ...`, `Docs(규약서): ...`
+- 이름을 바꿀 때는 코드보다 규약서를 먼저 고치고 팀에 공유한다. 규약서가 SSOT다.
 
-`Settings → Branches → Add rule`, 패턴 `main`:
-
-- ✅ Require a pull request before merging (main 직접 push 금지)
-- ✅ Require approvals: **1** (동료 1명 승인)
-- ✅ Require conversation resolution before merging
-- ⏳ infra만 추후 approvals **2**로 상향 검토 (인프라는 사고 파급이 큼)
-
-### 4-3. 커밋·브랜치 컨벤션
-
-- 브랜치: `main(보호) ← dev(통합) ← feature/*(개인)`
-- 커밋: `[카테고리]: 내용` — 카테고리 `FEAT` / `REFAC` / `FIX` / `CHORE`
-- PR: `[카테고리#이슈번호] 제목`
-
-### 4-4. CODEOWNERS (선택)
-
-레포 루트 `.github/CODEOWNERS` — PR 시 담당자 자동 리뷰 지정:
-
-```
-# 이 레포 전체 변경은 인프라 담당 2명이 리뷰한다
-*   @github핸들1 @github핸들2
-```
-
----
-
-## 5. 네이밍 규약 (요약)
-
-> 이름은 곧 계약이다. 여기 정한 문자열을 앱·ML·배포팀이 코드에 그대로 참조한다.
-> 아래는 **자주 쓰는 핵심만** 추린 것이다. **전체 사전은 [`docs/네이밍규약서.md`](./docs/네이밍규약서.md)에 있고, 이름의 원본(진실)은 그 규약서다.**
-
-### 5-1. 이름 공식
+## 6. 네이밍 (요약)
 
 ```
 <project_name>-<environment>-<리소스종류>[-<식별자>]
-예) hailcast-dev-vpc · hailcast-dev-rds-postgres
+예) hailcast-dev-vpc, hailcast-dev-eks, hailcast-dev-rds-postgres
 ```
 
-| 대상 | 규칙 |
-| --- | --- |
-| Terraform 변수 | `snake_case` |
-| AWS 리소스 | `kebab-case` (소문자+하이픈) |
-| S3 버킷 | 소문자+하이픈, 밑줄 금지, **전역 유일**(랜덤 접미사) |
-| 예측 지표(메트릭) | `snake_case` |
+- Terraform 변수는 snake_case, AWS 리소스는 kebab-case, S3 버킷은 전역 유일이라 랜덤 접미사
+- 뿌리 변수: `project_name=hailcast`, `environment=dev`(단일 환경), `aws_region=ap-northeast-2`
+- 주의: Karpenter 중단 큐 이름(`hailcast-dev`)은 클러스터 이름(`hailcast-dev-eks`)과 다르다.
+  배포팀이 `settings.interruptionQueue`에 큐 이름을 명시해야 한다.
 
-### 5-2. 뿌리 변수 3형제
+리소스 이름 전체, IRSA 역할과 연결 SA, 태그 규약, 팀 공유 계약(환경변수, 경로)은 전부
+[`docs/네이밍규약서.md`](./docs/네이밍규약서.md)에 있다. 여기 요약과 규약서가 다르면 규약서가 맞다.
 
-| 변수 | 값 |
-| --- | --- |
-| `project_name` | `hailcast` |
-| `environment` | `dev` (단일 환경) |
-| `aws_region` | `ap-northeast-2` |
-
-### 5-3. 대표 리소스 이름
-
-| 리소스 | 이름 |
-| --- | --- |
-| VPC | `hailcast-dev-vpc` |
-| EKS 클러스터 | `hailcast-dev-eks` |
-| System 노드그룹 | `hailcast-dev-eks-system-ng` (앱 노드는 Karpenter가 공급) |
-| S3(모델·예측) | `hailcast-dev-model-artifacts-<랜덤>` |
-| SQS(콜 큐) | `hailcast-dev-call-queue` |
-| RDS | `hailcast-dev-rds-postgres` |
-| Karpenter 중단 큐 | `hailcast-dev-eks` (Spot 중단 처리, 큐명은 임의 지정값) |
-| tfstate 버킷 | `hailcast-dev-tfstate-<랜덤>` (S3 자체 잠금 → DynamoDB 불필요) |
-
-### 5-4. 태그
-
-**자동 발견 태그(기능용):** `kubernetes.io/role/elb=1`(public) · `kubernetes.io/role/internal-elb=1`(private) · `karpenter.sh/discovery=hailcast-dev`(private) · `kubernetes.io/cluster/hailcast-dev-eks=shared`(private)
-
-**공통 비용 태그(`default_tags`):** `Project=hailcast` · `Environment=dev` · `ManagedBy=terraform`
-
-> 📖 **모듈별 전 리소스 이름 · IRSA 역할 · SG · output 계약 · 팀 전체 공유 계약**은 [`docs/네이밍규약서.md`](./docs/네이밍규약서.md) 참조.
-
----
-
-## 6. 워크로드 & CronJob
-
-### 6-1. 상시 파드
-
-| 파드 | 역할 |
-| --- | --- |
-| `call-api` | 콜 접수 → SQS 적재(즉시 응답) |
-| `worker` | SQS 소비·처리 (**KEDA 스케일 대상**) |
-| `predict` | 예측 서비스 (필요 시 `/metrics` 노출) |
-
-### 6-2. CronJob 3종
-
-| CronJob | 하는 일 | 산출물 |
-| --- | --- | --- |
-| `weather-cron` | Open-Meteo 예보 수집 | 예측 입력 데이터 |
-| `demand-forecast-cronjob` | 모델 로드(S3) → LightGBM 예측 → JSON 생성 → S3 업로드 | `s3://.../predictions/latest.json` |
-| `keda-scaler-updater-cronjob` | 위 JSON 읽기 → 목표 파드 수 계산 → **ScaledObject 갱신(patch)** | KEDA cron 스케줄 |
-
-**예측 → 스케일 흐름**
+## 7. 예측이 스케일로 이어지는 길
 
 ```
-[demand-forecast-cronjob]
-  모델 로드(S3) → 예측 계산 → JSON 생성 → S3 업로드
-        │  s3://hailcast-dev-model-artifacts-.../predictions/latest.json
-        ▼
-[keda-scaler-updater-cronjob]
-  JSON 읽기 → 시간대별 목표 파드 수 계산 → worker의 ScaledObject를 patch
-        │
-        ▼
-[KEDA] cron 트리거로 worker 선제 확장 → [Karpenter] 노드 공급
+weather-cron ─(4시간)→ S3 weather/
+predict 내부 스케줄러 2개:
+  ForecastScheduler ─(4시간)→ 예측 → RDS Prediction 테이블
+  ScalingScheduler  ─(60초)→ RDS 조회 → KEDA ScaledObject minReplicaCount patch
+KEDA ─(상시)→ SQS 콜 큐 길이로 worker 반응형 확장
+Karpenter ─(필요 시)→ 노드 공급, 중단 큐로 Spot 회수 대응
 ```
 
-> **설계 의도(개발팀):** 예측과 JSON 변환을 한 CronJob에서 처리해 파드 간 데이터 전달이라는 불필요한 복잡도를 없앤다(KISS). "예측"과 "스케일 결정"은 역할이 다르므로 2번은 별도 CronJob으로 유지한다(관심사 분리).
+예측이 빗나갔을 때의 반응형 분기까지 포함한 전체 흐름:
 
----
+![선제 스케일링 흐름](./docs/images/scaling-flow.png)
 
-## 7. 인프라 후속 조치 — CronJob이 남긴 권한
-
-CronJob 2개는 **서로 다른 두 권한 체계**를 건드린다. 이 둘을 섞으면 안 된다.
-
-| 무엇 | 어떤 권한 | 왜 |
-| --- | --- | --- |
-| S3에서 모델·JSON 읽기/쓰기 | **IRSA** (AWS 권한) | 클러스터 **밖** AWS 자원 접근 |
-| ScaledObject 수정(patch) | **K8s RBAC** (쿠버네티스 권한) | 클러스터 **안** API 호출 |
-
-| CronJob | 필요 권한 |
-| --- | --- |
-| `demand-forecast-cronjob` | IRSA: `hailcast-dev-irsa-forecast` (S3 model-artifacts 읽기·쓰기) |
-| `keda-scaler-updater-cronjob` | IRSA: S3 읽기 + **RBAC**: `scaledobjects.keda.sh` 리소스에 `get`·`patch` |
-
-- **S3 경로 계약:** 예측 JSON은 모델과 같은 버킷의 `predictions/` prefix 사용(별도 버킷 불필요, KISS).
-- **⚠ 통합 오너 확인:** KEDA cron 트리거는 원래 "고정 시간표"용이다. 예측값(동적)을 반영하려면 위처럼 ScaledObject를 주기적으로 patch하는 응용이 된다 — 이 방식과 기존 `predicted_taxi_demand` 메트릭 경로의 관계를 통합 오너와 한 번 정렬할 것.
-
----
+- 스케일 대상은 worker 하나다. predict는 replicas 1로 고정한다.
+- 권한은 두 체계다. AWS 자원 접근은 IRSA(AWS IAM), ScaledObject patch는 K8s RBAC.
+  섞이지 않는다. 상세는 규약서 5-3절과 8-4절.
 
 ## 8. 시작하기 (dev)
 
-### 8-1. tfstate 부트스트랩 (팀 0순위)
-
-Terraform은 자기 상태 저장소를 스스로 못 만든다(닭-달걀). **버킷 생성 단계만 backend 없이(로컬 상태로) 부트스트랩**한다.
-
-- S3 버킷 `hailcast-dev-tfstate-<랜덤>` (버저닝·암호화 on)
-- 잠금은 **S3 자체 잠금**(`use_lockfile = true`) 사용 → **DynamoDB 불필요**
-  - ⚠ Terraform **1.11 이상** 필요 (`terraform version`으로 확인)
-
-생성 후 실제 버킷 이름을 `backend.tf`에 반영.
-
-### 8-2. 실행 (dev)
-
-> ⚠ 전제: **Terraform 1.11+**(§8-1의 `use_lockfile`) · AWS 자격증명 설정(`aws configure` 또는 SSO)
+전제: Terraform 1.11 이상(S3 자체 잠금), 프로젝트 계정 자격증명.
+tfstate 백엔드(S3, `backend.tf`)는 이미 구성돼 있다.
 
 ```bash
-cd envs/dev
-terraform init      # 백엔드(S3) 초기화 + 모듈 다운로드
-terraform plan      # 변경 미리보기 — 실제 반영 전 반드시 확인
-terraform apply     # 실제 적용
-terraform destroy   # 데모 끝나면 리소스 내림 (FinOps 규율: 쓸 때만 켠다)
+aws sts get-caller-identity   # 프로젝트 계정인지 먼저 확인
+make init
+make plan
+make apply                    # 사람이 yes를 친다. 여기서부터 비용 시작
 ```
 
-민감 값은 tfvars 평문 금지 — 로컬은 `TF_VAR_db_password`, CI는 GitHub Secret으로 주입.
-
----
+- tfstate가 공용 하나라 apply는 한 번에 한 명. 팀 채널에 알리고 시작한다.
+- CI: PR마다 `gha-tf-plan`(읽기 전용, tfstate 잠금 파일 쓰기만 예외)이 plan을 돌린다. apply는 `dev` 브랜치에서
+  `infra-apply` environment 승인 후 `gha-tf-apply`가 한다. 이 역할들은 첫 apply가
+  만들어야 생기므로 첫 apply는 로컬에서 한다.
+- RDS 비밀번호는 사람이 다루지 않는다. RDS가 Secrets Manager에 자동 생성하고,
+  ESO(External Secrets Operator)가 클러스터의 K8s Secret으로 복제한다.
+- 내릴 때는 `make teardown`. K8s가 만든 자원(ALB, Karpenter 노드, EBS)은 tfstate 밖이라
+  먼저 걷어내는 순서가 있다. [`docs/비용관리.md`](./docs/비용관리.md) 5절 참조.
 
 ## 9. 관련 문서
 
-- [`docs/네이밍규약서.md`](./docs/네이밍규약서.md) — 전체 네이밍 사전 (이름의 단일 진실원천)
+- [`docs/네이밍규약서.md`](./docs/네이밍규약서.md) 모든 이름과 팀 계약의 SSOT
+- [`docs/비용관리.md`](./docs/비용관리.md) 예산 안전망, 태그 커버리지, destroy 순서

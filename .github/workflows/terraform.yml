@@ -1,1 +1,143 @@
-# 9.2 Terraform plan(PR)/apply(수동승인) 워크플로 (골격)
+# terraform CI — 규약서 §5-6
+#
+# plan  : PR 마다 자동. 읽기 전용 역할(hailcast-dev-gha-tf-plan).
+# apply : dev 에 머지된 뒤. 'infra-apply' environment 승인 후에만(hailcast-dev-gha-tf-apply).
+#
+# 주의: 이 파일의 '이름과 브랜치' 가 신뢰정책에 박혀 있다.
+#    apply 역할은 job_workflow_ref 조건으로
+#      <org>/project3-hailcast-infra/.github/workflows/terraform.yml@refs/heads/dev
+#    를 요구한다(modules/cicd/gha_tf.tf). 파일명을 바꾸거나 다른 브랜치에서 apply job 을
+#    돌리면 AWS 가 AssumeRole 을 거부한다. 바꾸려면 modules/cicd/variables.tf 의
+#    apply_workflow_file · apply_branch 를 함께 고쳐야 한다. 둘은 짝으로 움직인다.
+#
+# !! pull_request_target 을 쓰지 마라.
+#    base 브랜치 컨텍스트에서 돌면서 id-token 을 받으므로, 포크가 연 PR 의 코드가
+#    plan 역할 자격증명 안에서 실행된다. ReadOnlyAccess 로 tfstate 를 읽으면
+#    RDS 비번이 평문으로 나온다. 이 레포는 PUBLIC 이다.
+#    그래서 plan 역할의 신뢰정책 sub 를 'pull_request' 하나로만 좁혀 뒀다.
+#
+# !! 이 레포가 PUBLIC 이라 Actions 로그도 공개된다.
+#    plan 전문을 PR 코멘트·요약으로 뱉지 않는다. terraform 이 sensitive 값을 가리긴 하지만,
+#    공개된 곳에 인프라 전체 형상을 통째로 올릴 이유가 없다.
+#
+# 필요한 GitHub secret 2개 (주의: 첫 apply 를 로컬에서 한 뒤에야 값이 생긴다 — 닭-달걀):
+#   AWS_TF_PLAN_ROLE_ARN  = hailcast-dev-gha-tf-plan  역할 ARN
+#   AWS_TF_APPLY_ROLE_ARN = hailcast-dev-gha-tf-apply 역할 ARN
+#   (ARN 에 계정 ID 가 들어간다 → 퍼블릭 레포이므로 secret 으로 둔다)
+
+name: terraform
+
+on:
+  pull_request:
+    paths:
+      - "**.tf"
+      - "**.tftpl"
+      - "**.json"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [dev]
+    paths:
+      - "**.tf"
+      - "**.tftpl"
+      - "**.json"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch: # dev 에서 수동 실행 → apply (environment 승인은 그대로 필요)
+
+permissions:
+  id-token: write # OIDC 토큰 발급 — 장기 AWS 키를 쓰지 않는다
+  contents: read
+
+# 같은 tfstate 를 두 job 이 동시에 잠그지 않게 한다.
+# cancel-in-progress = false — apply 를 중간에 끊으면 부분 적용 + 잠금 잔류가 된다.
+concurrency:
+  group: terraform-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+  TF_VERSION: "1.15.5" # use_lockfile 은 1.11+ 필요
+  ENV_DIR: envs/dev
+  # CI 는 tfvars(gitignore) 없이 돈다. 비밀 아닌 값은 variables.tf 기본값에 있고,
+  # 계정 ID 가 들어가는 access entry ARN 목록만 secret 으로 주입한다(레포가 퍼블릭이라 코드에 못 둔다).
+  # ⚠️ secret 은 repo secret 으로 등록한다(environment secret 이면 plan job 이 못 받는다).
+  #    미등록이면 빈 문자열이 주입되고 terraform 이 list 파싱 에러로 죽는다(fail-closed · plan 포함 전부).
+  #    → 이 워크플로 변경을 머지하기 전에 secret 등록을 끝내야 PR plan 이 초록불이 된다.
+  #    값 형식은 JSON 배열 문자열: ["arn:aws:iam::<계정>:user/<이름>", ...] · editor 는 [] 라도 등록한다.
+  TF_VAR_cluster_admin_principal_arns: ${{ secrets.CLUSTER_ADMIN_PRINCIPAL_ARNS }}
+  TF_VAR_cluster_editor_principal_arns: ${{ secrets.CLUSTER_EDITOR_PRINCIPAL_ARNS }}
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # 자격증명이 필요 없는 검사를 먼저 — 여기서 걸리면 AWS 를 아예 안 부른다.
+      - name: fmt
+        run: terraform fmt -check -recursive
+
+      - name: AssumeRole (plan · 읽기 전용)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TF_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: init
+        working-directory: ${{ env.ENV_DIR }}
+        run: terraform init -input=false
+
+      - name: validate
+        working-directory: ${{ env.ENV_DIR }}
+        run: terraform validate
+
+      # -out 을 쓰지 않는다. plan 파일에는 값이 평문으로 들어가고, 아티팩트로 올리면
+      # 퍼블릭 레포의 공개 아티팩트가 된다. apply job 은 dev 에서 어차피 다시 plan 한다.
+      - name: plan
+        id: plan
+        working-directory: ${{ env.ENV_DIR }}
+        run: terraform plan -input=false -lock-timeout=5m -no-color
+
+      - name: summary
+        if: always()
+        run: |
+          echo "### terraform plan — \`${{ steps.plan.outcome }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "상세는 job 로그에서 보십시오. 퍼블릭 레포라 plan 전문을 요약에 싣지 않습니다." >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    # * 승인 게이트. 이 environment 의 Required reviewers 가 승인하기 전에는 job 이 시작조차
+    #    하지 않는다 → OIDC 토큰이 안 나오고 → AWS 가 AssumeRole 을 거부한다.
+    #    승인이 GitHub UI 설정이 아니라 AWS 레벨에서 강제되는 구조다.
+    environment: infra-apply
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: AssumeRole (apply · 승인 후)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TF_APPLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          # 콜드 apply(VPC+NAT+EKS+노드그룹+RDS)는 1시간을 넘길 수 있다.
+          # 역할의 max_session_duration 이 6시간이라 그 이하를 요청한다.
+          role-duration-seconds: 21600
+
+      - name: init
+        working-directory: ${{ env.ENV_DIR }}
+        run: terraform init -input=false
+
+      - name: apply
+        working-directory: ${{ env.ENV_DIR }}
+        run: terraform apply -input=false -auto-approve -lock-timeout=5m -no-color

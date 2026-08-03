@@ -1,1 +1,21 @@
-# 실제 값 예시 파일 (실값은 terraform.tfvars 에, 이 파일은 커밋 O)
+# 이 파일을 복사해서 terraform.tfvars 를 만드십시오.  cp terraform.tfvars.example terraform.tfvars
+# terraform.tfvars 는 gitignore 입니다. ARN 에 계정 ID 가 들어가고 이 레포는 PUBLIC 입니다.
+
+cluster_admin_principal_arns = [
+  "arn:aws:iam::<ACCOUNT_ID>:user/<팀장>",
+  "arn:aws:iam::<ACCOUNT_ID>:user/<배포팀>",
+]
+
+cluster_editor_principal_arns = [
+  "arn:aws:iam::<ACCOUNT_ID>:user/<앱팀>",
+]
+
+# apply 를 실행하는 principal 은 넣지 마십시오.
+#    bootstrap_cluster_creator_admin_permissions = true 라 자동 등재되며,
+#    같은 principal 이 두 access entry 에 들어가면 apply 가 실패합니다.
+
+# ── 엣지 (Y7) ──────────────────────────────
+# enable_edge · domain_name · alb_dns_name 은 여기 적지 마십시오.
+# 세 값 모두 루트 변수 기본값에 실값이 있습니다 (CI 가 tfvars 없이 도는 탓 · 규약서 §5-6).
+# tfvars 로 덮으면 기본값을 무력화해 ACM 인증서 2종·CloudFront·서비스 레코드 3종이
+# 전부 destroy 대상이 됩니다.
