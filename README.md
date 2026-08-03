@@ -40,11 +40,12 @@ project3-hailcast-infra/
 ├── envs/dev/                # 조립과 상태 (backend.tf, main.tf, variables.tf, outputs.tf 등)
 ├── modules/
 │   ├── network/             # VPC, 서브넷, NAT, 라우팅, 게이트웨이 엔드포인트(S3, DynamoDB)
-│   ├── storage/             # S3 모델 버킷, ECR
+│   ├── storage/             # S3 모델 버킷, S3 CUR 버킷, ECR
 │   ├── eks/                 # 클러스터, 시스템 노드그룹, OIDC, IRSA, access entry
 │   ├── data/                # RDS, SQS 콜 큐, Karpenter 중단 큐, DynamoDB, Parameter Store
 │   ├── cicd/                # GitHub Actions OIDC 역할 (ECR push, tf plan, tf apply)
-│   └── edge/                # Route53, ACM, CloudFront (enable_edge 스위치, 기본 true)
+│   ├── edge/                # Route53, ACM, CloudFront (enable_edge 스위치, 기본 true)
+│   └── schedule/            # 야간 절전 EventBridge Scheduler (enable_night_shutdown 스위치, 기본 true)
 ├── docs/
 │   ├── 네이밍규약서.md      # 모든 이름과 팀 계약의 단일 진실원천(SSOT)
 │   └── 비용관리.md          # 예산, 태그 커버리지, destroy 순서 런북
@@ -64,6 +65,7 @@ VPC `10.0.0.0/16`, AZ 2a와 2c.
 | 진입 | ALB(배포팀 Ingress가 생성). 그 앞단에 Route53, ACM, CloudFront(`enable_edge` 기본 true, NS 위임과 ALB가 선행 조건) |
 | 컴퓨트 | EKS. 시스템 노드그룹(관리형)에 플랫폼 파드, 앱 파드는 Karpenter가 공급하는 Spot 노드에 |
 | 데이터 | S3(모델, 날씨, 트래픽 샤드), RDS PostgreSQL Single-AZ(콜, 예측, 스케일링 이력), DynamoDB(오답노트), SQS(콜 큐와 Karpenter 중단 큐), Secrets Manager(RDS 자동 생성 비번), Parameter Store(RDS 엔드포인트) |
+| 비용 | S3 CUR 버킷(AWS 청구 리포트와 Athena 쿼리 결과). OpenCost가 실청구액을 읽는 경로다 |
 | 접근, 보안 | SSH 인바운드 없음(SSM Session Manager). RDS 5432는 노드 SG에서 온 것만. 파드 권한은 IRSA로 역할별 분리 |
 
 노드와 서브넷 배치 상세:
@@ -84,6 +86,9 @@ VPC `10.0.0.0/16`, AZ 2a와 2c.
   신뢰정책이다(environment, 워크플로 파일, 브랜치를 고정).
 - 비용을 설계 범위에 넣었다. 전 리소스 비용 태그, 예산 경보, K8s가 만든 자원까지 걷어내는
   teardown 순서 런북(비용관리.md)까지를 인프라가 책임진다.
+- 개발 기간 비용은 스케줄로 줄인다. EventBridge Scheduler가 Lambda 없이 AWS API를 직접 불러
+  매일 KST 02~10시에 시스템 노드그룹과 RDS를 내렸다 올린다(`enable_night_shutdown`, 기본 true).
+  서비스 기능이 아니라 학습 기간 예산 장치다.
 
 ## 5. 협업 규약
 

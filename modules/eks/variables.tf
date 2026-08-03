@@ -79,9 +79,9 @@ variable "enable_app_irsa" {
     아래 ARN 4종(S3 · 콜 큐 · Karpenter 중단 큐 · RDS 시크릿)이 배선된 뒤 envs/dev 에서 true 로 켠다.
     오답노트 DynamoDB 는 전제조건이 아니다 — 아래 validation 주석 참조.
 
-    ※ weather-cron 은 2026-07-14 신설이다. 앱이 DB 를 빼고 S3 를 유일한 진실원천으로
-      재설계하면서(app common/core/store.py:2) 날씨 CSV 도 S3 를 지나가게 됐다.
-      이 역할이 없으면 CSV 가 안 올라가고 predict 가 못 읽어 예측이 통째로 안 된다.
+    ※ weather-cron 은 2026-07-14 신설이다. 날씨 CSV 는 파일 아티팩트라 RDS 컷오버 뒤에도
+      S3 를 지나간다(규약서 §8-3). 이 역할이 없으면 CSV 가 안 올라가고
+      predict 가 못 읽어 예측이 통째로 안 된다.
 
     ※ simulator 는 K8s 에 s3 백엔드로 뜬다(팀 결정). JSON_STORE_BACKEND=s3 라 2초마다
       simulator/status.json 을 S3 에 쓴다. irsa-simulator 가 simulator/ 쓰기를 갖고,
