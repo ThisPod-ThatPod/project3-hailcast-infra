@@ -105,8 +105,12 @@ resource "aws_iam_role" "irsa" {
 # 정책 본문은 손으로 줄이지 않고 upstream 원본을 그대로 벤더링한다:
 #   출처: kubernetes-sigs/aws-load-balancer-controller · docs/install/iam_policy.json
 #   임의로 action 을 쳐내면 Ingress 조정(reconcile)이 특정 경로에서만 조용히 실패한다.
-# 원본이 Resource="*" 인 statement 들은 대부분 elasticloadbalancing:*Tag 조건으로 좁혀져 있고,
-# 컨트롤러가 클러스터 밖 LB 를 건드리지 않도록 upstream 이 조건을 설계해 두었다.
+# 원본에는 Resource="*" 인 statement 가 12개 있고 그중 5개는 Condition 이 없다.
+#   ec2:AuthorizeSecurityGroupIngress·RevokeSecurityGroupIngress / ec2:CreateSecurityGroup /
+#   elasticloadbalancing:CreateListener·DeleteListener·CreateRule·DeleteRule /
+#   SetWebAcl·ModifyListener·AddListenerCertificates·RemoveListenerCertificates·ModifyRule·SetRulePriorities /
+#   shield·wafv2 연결 해제
+# 즉 계정 안의 SG 규칙과 다른 ALB 의 리스너까지 닿는다. 그래도 원본을 줄이지 않는 쪽을 택했다.
 resource "aws_iam_policy" "lbctrl" {
   name        = "${local.name_prefix}-irsa-lbctrl-policy"
   description = "AWS Load Balancer Controller 공식 IAM 정책(upstream iam_policy.json 원본)."
