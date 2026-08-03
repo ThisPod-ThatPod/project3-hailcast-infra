@@ -133,19 +133,20 @@ resource "aws_iam_role_policy_attachment" "monitoring" {
 }
 
 # ════════════════════════════════════════════════════════════════════
-# 앱 6종. enable_app_irsa = true 일 때만 (ARN 3종 배선 후 · 오답노트 DynamoDB 는 선택)
+# 앱 8종. enable_app_irsa = true 일 때만 (ARN 3종 배선 후 · 오답노트 DynamoDB 는 선택)
 #
-# 앱이 DB 를 빼고 S3 를 유일한 진실원천으로 재설계했다(app common/core/store.py:2
-#    "DB를 뺀 이번 재설계"). 그래서 콜 기록·트래픽 집계·스케일 이력·대시보드까지 전부
-#    이 버킷 하나를 지나간다. 아래 프리픽스 표가 그 결과다(app common/core/constants.py).
+# 서비스 상태(콜·예측·스케일 이력)는 RDS 가 SSOT 다. RDS 컷오버가 끝났다(규약서 §0·§8-3).
+#    S3 에 남는 것은 파일 아티팩트와 predict 가 자기 상태로 쓰는 JSON 이다.
+#    predictions 만 RDS 와 S3 를 함께 쓴다(앱팀 회신 2026-07-20 · 규약서 §0).
 #
-#   프리픽스              | predict | call-api | worker | weather-cron
-#   ----------------------|---------|----------|--------|-------------
-#   models/*              |  읽기   |    -     |   -    |     -
-#   predictions/*         |  읽기+쓰기 |  -     |   -    |     -
-#   weather/*             |  읽기   |    -     |   -    |   쓰기
-#   traffic/instances/*   |  읽기   |   쓰기   |   -    |     -
-#   dashboard/*           |  읽기+쓰기 |  -     |   -    |     -
+#   프리픽스              | predict | call-api | worker | weather-cron | simulator
+#   ----------------------|---------|----------|--------|--------------|----------
+#   models/*              |  읽기   |    -     |   -    |     -        |    -
+#   predictions/*         |  읽기+쓰기 |  -     |   -    |     -        |    -
+#   weather/*             |  읽기   |    -     |   -    |   쓰기       |    -
+#   traffic/instances/*   |  읽기   |   쓰기   |   -    |     -        |    -
+#   dashboard/*           |  읽기+쓰기 |  -     |   -    |     -        |    -
+#   simulator/*           |  읽기   |    -     |   -    |     -        |   쓰기
 #
 # 앱의 FileStore 는 read 하기 전에 exists() 를 먼저 부르고, exists() 는 head_object 다
 #    (app common/aws/s3_adapter.py:95-100 · head_object 는 :97). HeadObject 는 s3:GetObject 권한으로 인가되므로
