@@ -100,6 +100,11 @@ output "eks_node_group_name" {
   value       = module.eks.node_group_name
 }
 
+output "eks_alb_cloudfront_sg_id" {
+  description = "ALB 인바운드를 CloudFront 로만 제한하는 SG ID. 배포팀 Ingress annotation 전달값."
+  value       = module.eks.alb_cloudfront_sg_id
+}
+
 output "eks_irsa_role_arns" {
   description = "IRSA 역할 키→ARN 맵. manifests SA 애노테이션이 참조. 종수·목록은 규약서 §5-3 이 정한다."
   value       = module.eks.irsa_role_arns
