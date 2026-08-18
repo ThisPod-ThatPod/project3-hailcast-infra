@@ -88,6 +88,22 @@ data "aws_iam_policy_document" "glue_crawler" {
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.cur.arn}/${var.cur_prefix}/hailcast-dev-cur/hailcast-dev-cur*"]
   }
+
+  # 크롤러가 대상 경로를 실측 실패했다(2026-08-18 · "User does not have access to target").
+  # GetObject 만으로는 크롤러가 폴더 아래 객체 목록을 못 훑는다 — s3:ListBucket 이 빠져 있었다.
+  # predict 의 ListBucketForTrafficShards 와 같은 이유로 대상은 버킷 자체이고 조건으로 좁힌다.
+  statement {
+    sid       = "ListCurPrefix"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.cur.arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["${var.cur_prefix}/hailcast-dev-cur/hailcast-dev-cur*"]
+    }
+  }
 }
 
 resource "aws_iam_policy" "glue_crawler" {
