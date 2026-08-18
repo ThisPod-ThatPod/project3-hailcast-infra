@@ -47,6 +47,7 @@ locals {
     karpenter      = "kube-system:karpenter"             # 관례상 kube-system
     simulator      = "hailcast:simulator-sa"             # s3 백엔드로 simulator/status.json 쓰기(§5-3)
     eso            = "external-secrets:external-secrets" # ESO 컨트롤러 SA(Helm 기본값). RDS 시크릿 읽기
+    opencost       = "opencost:opencost"                 # OpenCost Helm 차트 기본 SA 이름(추정) — 배포 시 실제 값 확인 필요(§5-3 monitoring 과 같은 패턴)
   }
 
   # for_each 의 '키'는 위 리터럴 문자열과 plan 시점에 확정된 불리언으로만 결정된다.
@@ -133,7 +134,7 @@ resource "aws_iam_role_policy_attachment" "monitoring" {
 }
 
 # ════════════════════════════════════════════════════════════════════
-# 앱 8종. enable_app_irsa = true 일 때만 (ARN 3종 배선 후 · 오답노트 DynamoDB 는 선택)
+# 앱 9종. enable_app_irsa = true 일 때만 (ARN 3종 배선 후 · 오답노트 DynamoDB 는 선택)
 #
 # 서비스 상태(콜·예측·스케일 이력)는 RDS 가 SSOT 다. RDS 컷오버가 끝났다(규약서 §0·§8-3).
 #    S3 에 남는 것은 파일 아티팩트와 predict 가 자기 상태로 쓰는 JSON 이다.
@@ -387,7 +388,111 @@ data "aws_iam_policy_document" "eso" {
   }
 }
 
-# 위 7종의 정책 생성·연결을 한 번에.
+# ── 11) opencost - CUR/Glue/Athena 읽기 (OpenCost Cloud Costs Level 2) ──
+# ARN 4종(cur_bucket_arn·glue_database_arn·glue_database_name·athena_workgroup_arn)이
+# storage 모듈에 아직 없던 시절엔 이 역할도 정책 없이 빈 채로 만들어졌다(다른 8종과 같은
+# enable_app_irsa 게이트를 쓰므로 역할 자체는 항상 생긴다). 이제 storage 가 그 값들을
+# 내보내므로 각 statement 를 dynamic 으로 두어 'ARN 이 오면 붙고 없으면 건너뛴다'
+# (prediction_log_table_arn 과 같은 패턴).
+data "aws_iam_policy_document" "opencost" {
+  count = var.enable_app_irsa ? 1 : 0
+
+  dynamic "statement" {
+    for_each = var.athena_workgroup_arn == null ? [] : [var.athena_workgroup_arn]
+
+    content {
+      sid    = "RunAthenaQueries"
+      effect = "Allow"
+      actions = [
+        "athena:StartQueryExecution",
+        "athena:GetQueryExecution",
+        "athena:GetQueryResults",
+        "athena:StopQueryExecution",
+        "athena:GetWorkGroup",
+      ]
+      resources = [statement.value]
+    }
+  }
+
+  # Glue 는 카탈로그·데이터베이스·테이블 ARN 을 함께 줘야 인가된다 — 셋 중 하나라도 빠지면
+  # AccessDenied 다. 테이블 ARN 은 database/* 와일드카드로 잡는다(크롤러가 만드는 테이블
+  # 이름을 여기서 미리 알 수 없다).
+  dynamic "statement" {
+    for_each = var.glue_database_arn == null ? [] : [var.glue_database_arn]
+
+    content {
+      sid    = "ReadGlueCatalog"
+      effect = "Allow"
+      actions = [
+        "glue:GetDatabase",
+        "glue:GetTable",
+        "glue:GetTables",
+        "glue:GetPartition",
+        "glue:GetPartitions",
+      ]
+      resources = [
+        "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:catalog",
+        statement.value,
+        "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.glue_database_name}/*",
+      ]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.cur_bucket_arn == null ? [] : [var.cur_bucket_arn]
+
+    content {
+      sid       = "ReadCurData"
+      effect    = "Allow"
+      actions   = ["s3:GetObject"]
+      resources = ["${statement.value}/${var.cur_prefix}/*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.cur_bucket_arn == null ? [] : [var.cur_bucket_arn]
+
+    content {
+      sid       = "WriteAthenaResults"
+      effect    = "Allow"
+      actions   = ["s3:GetObject", "s3:PutObject"]
+      resources = ["${statement.value}/${var.athena_results_prefix}/*"]
+    }
+  }
+
+  # Athena 가 결과를 쓰기 전에 출력 위치를 목록 조회한다 — 없으면 쿼리 자체가 실패한다.
+  # predict 의 ListBucketForTrafficShards 와 같은 이유로 대상은 버킷 자체이고 조건으로 좁힌다.
+  dynamic "statement" {
+    for_each = var.cur_bucket_arn == null ? [] : [var.cur_bucket_arn]
+
+    content {
+      sid       = "ListAthenaResultsPrefix"
+      effect    = "Allow"
+      actions   = ["s3:ListBucket"]
+      resources = [statement.value]
+
+      condition {
+        test     = "StringLike"
+        variable = "s3:prefix"
+        values   = ["${var.athena_results_prefix}/*"]
+      }
+    }
+  }
+
+  # Athena 가 쿼리 실행 전 출력 버킷의 리전을 확인한다(공식 문서 기준 상시 필요 권한).
+  dynamic "statement" {
+    for_each = var.cur_bucket_arn == null ? [] : [var.cur_bucket_arn]
+
+    content {
+      sid       = "GetCurBucketLocation"
+      effect    = "Allow"
+      actions   = ["s3:GetBucketLocation"]
+      resources = [statement.value]
+    }
+  }
+}
+
+# 위 8종의 정책 생성·연결을 한 번에.
 # for_each 키는 리터럴 + plan 시점 확정 불리언으로만 정해진다(정책 '본문'이 미상이어도 무방.
 # 미상이면 안 되는 건 '키'이지 '값'이 아니다).
 locals {
@@ -399,6 +504,7 @@ locals {
     keda           = data.aws_iam_policy_document.keda[0].json
     simulator      = data.aws_iam_policy_document.simulator[0].json
     eso            = data.aws_iam_policy_document.eso[0].json
+    opencost       = data.aws_iam_policy_document.opencost[0].json
   } : {}
 
   # aws_iam_policy 의 description 은 AWS 에 수정 API 가 없어 Terraform 이 '정책을 지우고 다시 만든다'
@@ -413,6 +519,7 @@ locals {
     keda           = "keda-operator: SQS 큐 길이 조회 전용(반응형 스케일 트리거)."
     simulator      = "simulator-sa: S3 simulator/ 쓰기 전용(status.json)."
     eso            = "external-secrets: RDS 비번 시크릿 GetSecretValue + 엔드포인트 파라미터 GetParameter."
+    opencost       = "opencost: Athena 쿼리 실행 + Glue 카탈로그 읽기 + CUR 원본 읽기 + Athena 결과 읽기쓰기(ARN 미배선 시 빈 정책)."
   }
 }
 

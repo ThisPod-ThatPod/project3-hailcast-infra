@@ -160,8 +160,18 @@ output "cur_prefix" {
 }
 
 output "athena_results_location" {
-  description = "Athena 쿼리 결과를 둘 위치(s3:// URI). 이 값을 쓸 Workgroup 은 아직 없다"
+  description = "Athena 쿼리 결과를 둘 위치(s3:// URI). athena_workgroup_name 이 이 값을 쓴다"
   value       = module.storage.athena_results_location
+}
+
+output "glue_database_name" {
+  description = "CUR Glue 데이터베이스 이름. 배포팀 OpenCost Helm values 가 참조."
+  value       = module.storage.glue_database_name
+}
+
+output "athena_workgroup_name" {
+  description = "OpenCost 전용 Athena workgroup 이름. 배포팀 OpenCost Helm values 가 참조."
+  value       = module.storage.athena_workgroup_name
 }
 
 output "alb_certificate_arn" {

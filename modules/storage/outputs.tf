@@ -37,7 +37,32 @@ output "cur_prefix" {
   value       = var.cur_prefix
 }
 
+output "athena_results_prefix" {
+  description = "Athena 쿼리 결과 프리픽스. eks 모듈의 opencost IRSA 정책이 이 값으로 경로를 좁힌다."
+  value       = var.athena_results_prefix
+}
+
 output "athena_results_location" {
-  description = "Athena 쿼리 결과를 둘 위치(s3:// URI). 이 값을 쓸 Workgroup 은 아직 없다 — Level 2 다음 단계에서 만든다."
+  description = "Athena 쿼리 결과를 둘 위치(s3:// URI). athena_workgroup_name 의 result_configuration 이 이 값을 그대로 쓴다."
   value       = "s3://${aws_s3_bucket.cur.id}/${var.athena_results_prefix}/"
+}
+
+output "glue_database_name" {
+  description = "CUR Glue 데이터베이스 이름. OpenCost 설정과 Athena 쿼리가 참조한다."
+  value       = aws_glue_catalog_database.cur.name
+}
+
+output "glue_database_arn" {
+  description = "CUR Glue 데이터베이스 ARN. OpenCost IRSA 정책이 참조한다."
+  value       = aws_glue_catalog_database.cur.arn
+}
+
+output "athena_workgroup_name" {
+  description = "OpenCost 가 쓸 Athena workgroup 이름."
+  value       = aws_athena_workgroup.opencost.name
+}
+
+output "athena_workgroup_arn" {
+  description = "Athena workgroup ARN. OpenCost IRSA 정책이 참조한다."
+  value       = aws_athena_workgroup.opencost.arn
 }
