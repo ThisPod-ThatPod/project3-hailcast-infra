@@ -59,9 +59,9 @@ data "aws_iam_policy_document" "glue_crawler" {
     resources = ["arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws-glue/*"]
   }
 
-  # 카탈로그 조작은 Resource="*" 가 AWS 기본 템플릿의 값이다. glue:ImportCatalogToGlue 같은
-  # 계정 전역 액션이 섞여 있어 데이터베이스·테이블 ARN 으로는 못 좁힌다 — upstream(lbctrl·
-  # karpenter)과 같은 원칙으로 원본 범위를 그대로 둔다.
+  # AWS 기본 템플릿(crawler-cfn.yml)은 이 8개 액션을 Resource="*"로 준다. 그런데 여기 담긴
+  # 액션은 전부 catalog·database·table 세 ARN 조합으로 인가된다(AWS Glue fine-grained access
+  # 문서 기준) — irsa.tf 의 opencost ReadGlueCatalog 와 같은 패턴으로 좁힌다.
   statement {
     sid    = "UpdateCurCatalog"
     effect = "Allow"
@@ -75,7 +75,11 @@ data "aws_iam_policy_document" "glue_crawler" {
       "glue:GetDatabase",
       "glue:GetTable",
     ]
-    resources = ["*"]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:catalog",
+      aws_glue_catalog_database.cur.arn,
+      "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${aws_glue_catalog_database.cur.name}/*",
+    ]
   }
 
   statement {

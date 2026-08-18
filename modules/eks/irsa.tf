@@ -134,7 +134,7 @@ resource "aws_iam_role_policy_attachment" "monitoring" {
 }
 
 # ════════════════════════════════════════════════════════════════════
-# 앱 8종. enable_app_irsa = true 일 때만 (ARN 3종 배선 후 · 오답노트 DynamoDB 는 선택)
+# 앱 9종. enable_app_irsa = true 일 때만 (ARN 3종 배선 후 · 오답노트 DynamoDB 는 선택)
 #
 # 서비스 상태(콜·예측·스케일 이력)는 RDS 가 SSOT 다. RDS 컷오버가 끝났다(규약서 §0·§8-3).
 #    S3 에 남는 것은 파일 아티팩트와 predict 가 자기 상태로 쓰는 JSON 이다.
