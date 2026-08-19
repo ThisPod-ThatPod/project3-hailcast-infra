@@ -59,9 +59,13 @@ data "aws_iam_policy_document" "glue_crawler" {
     resources = ["arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws-glue/*"]
   }
 
-  # AWS 기본 템플릿(crawler-cfn.yml)은 이 8개 액션을 Resource="*"로 준다. 그런데 여기 담긴
-  # 액션은 전부 catalog·database·table 세 ARN 조합으로 인가된다(AWS Glue fine-grained access
-  # 문서 기준) — irsa.tf 의 opencost ReadGlueCatalog 와 같은 패턴으로 좁힌다.
+  # crawler-cfn.yml 인라인 정책은 5개 액션만 Resource="*"로 주고 나머지는 AWS 관리형 정책
+  # (AWSGlueServiceRole)이 커버한다 — 그 정책은 여기서 붙이지 않는다(최소권한 유지). 그래서
+  # 나머지 액션은 실행 실측으로 하나씩 확인해 추가한다. 이 statement의 액션은 전부
+  # catalog·database·table 세 ARN 조합으로 인가된다(AWS Glue fine-grained access 문서 기준)
+  # — irsa.tf 의 opencost ReadGlueCatalog 와 같은 패턴으로 좁힌다.
+  # glue:BatchGetPartition 은 실행 실측 실패(2026-08-19 · AccessDeniedException)로 추가했다.
+  # 정확히 어느 호출에서 쓰는지는 확인 안 함.
   statement {
     sid    = "UpdateCurCatalog"
     effect = "Allow"
@@ -72,6 +76,7 @@ data "aws_iam_policy_document" "glue_crawler" {
       "glue:CreateTable",
       "glue:UpdateTable",
       "glue:BatchCreatePartition",
+      "glue:BatchGetPartition",
       "glue:GetDatabase",
       "glue:GetTable",
     ]
