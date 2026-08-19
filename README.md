@@ -45,7 +45,7 @@ project3-hailcast-infra/
 │   ├── data/                # RDS, SQS 콜 큐, Karpenter 중단 큐, DynamoDB, Parameter Store
 │   ├── cicd/                # GitHub Actions OIDC 역할 (ECR push, tf plan, tf apply)
 │   ├── edge/                # Route53, ACM, CloudFront (enable_edge 스위치, 기본 true)
-│   └── schedule/            # 야간 절전 EventBridge Scheduler (enable_night_shutdown 스위치, 기본 true)
+│   └── schedule/            # 야간 절전 EventBridge Scheduler (enable_night_shutdown 스위치, 기본 false)
 ├── docs/
 │   ├── 네이밍규약서.md      # 모든 이름과 팀 계약의 단일 진실원천(SSOT)
 │   └── 비용관리.md          # 예산, 태그 커버리지, destroy 순서 런북
@@ -87,7 +87,7 @@ VPC `10.0.0.0/16`, AZ 2a와 2c.
 - 비용을 설계 범위에 넣었다. 전 리소스 비용 태그, 예산 경보, K8s가 만든 자원까지 걷어내는
   teardown 순서 런북(비용관리.md)까지를 인프라가 책임진다.
 - 개발 기간 비용은 스케줄로 줄인다. EventBridge Scheduler가 Lambda 없이 AWS API를 직접 불러
-  매일 KST 02~10시에 시스템 노드그룹과 RDS를 내렸다 올린다(`enable_night_shutdown`, 기본 true).
+  매일 KST 02~10시에 시스템 노드그룹과 RDS를 내렸다 올린다(`enable_night_shutdown`, 기본 false).
   서비스 기능이 아니라 학습 기간 예산 장치다.
 
 ## 5. 협업 규약
