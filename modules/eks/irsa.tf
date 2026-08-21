@@ -48,6 +48,7 @@ locals {
     simulator      = "hailcast:simulator-sa"             # s3 백엔드로 simulator/status.json 쓰기(§5-3)
     eso            = "external-secrets:external-secrets" # ESO 컨트롤러 SA(Helm 기본값). RDS 시크릿 읽기
     opencost       = "opencost:opencost"                 # OpenCost Helm 차트 기본 SA 이름(추정) — 배포 시 실제 값 확인 필요(§5-3 monitoring 과 같은 패턴)
+    retraining     = "hailcast:retraining-sa"            # 오답노트 이어학습 CronJob 전용(predict-sa 와 분리 · 팀 결정 2026-08-20)
   }
 
   # for_each 의 '키'는 위 리터럴 문자열과 plan 시점에 확정된 불리언으로만 결정된다.
@@ -492,7 +493,43 @@ data "aws_iam_policy_document" "opencost" {
   }
 }
 
-# 위 8종의 정책 생성·연결을 한 번에.
+# ── 12) retraining - 오답노트 이어학습 CronJob 전용 (predict-sa 와 분리) ──
+# 모델을 덮어쓰는 권한(S3 PutObject)을 상시 추론 파드(predict)에 주면 사고 반경이 크다.
+#    predict 는 replicas 가 여럿이고 KEDA 로 늘어나므로, 그중 하나라도 오작동하면
+#    models/latest/model.pkl 이 오염돼 모든 파드가 망가진 모델로 예측하게 된다.
+#    추론 파드가 모델을 쓸 이유는 애초에 없다 → 재학습만 쓰는 별도 역할로 분리한다(팀 결정 2026-08-20).
+#
+# 대상 코드: app ml/retrain_trigger.py (origin/dev 실측).
+#    읽기 — download_file("models/latest/model.pkl")
+#    쓰기 — upload_file("models/latest/model.pkl") + upload_json("models/latest/metadata.json")
+#    두 파일 다 models/latest/ 아래라 프리픽스로 묶는다. predict 의 읽기 전용 models/* 보다
+#    좁게 latest/ 로 자른다 — 재학습이 건드리는 건 이 한 버전뿐이다.
+data "aws_iam_policy_document" "retraining" {
+  count = var.enable_app_irsa ? 1 : 0
+
+  statement {
+    sid       = "ReadWriteLatestModel"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["${var.model_bucket_arn}/models/latest/*"]
+  }
+
+  # 오답노트 조회(Scan)와 학습 완료 마킹(UpdateItem)만. PutItem 은 predict 만 갖는다 —
+  #    이 역할이 새 레코드를 만들 이유가 없다(scan_all·mark_trained 만 호출).
+  #    predict 의 WritePredictionLog 와 같은 패턴으로, ARN 이 왔을 때만 statement 를 붙인다.
+  dynamic "statement" {
+    for_each = var.prediction_log_table_arn == null ? [] : [var.prediction_log_table_arn]
+
+    content {
+      sid       = "ReadAndMarkPredictionLog"
+      effect    = "Allow"
+      actions   = ["dynamodb:Scan", "dynamodb:UpdateItem"]
+      resources = [statement.value]
+    }
+  }
+}
+
+# 위 9종의 정책 생성·연결을 한 번에.
 # for_each 키는 리터럴 + plan 시점 확정 불리언으로만 정해진다(정책 '본문'이 미상이어도 무방.
 # 미상이면 안 되는 건 '키'이지 '값'이 아니다).
 locals {
@@ -505,6 +542,7 @@ locals {
     simulator      = data.aws_iam_policy_document.simulator[0].json
     eso            = data.aws_iam_policy_document.eso[0].json
     opencost       = data.aws_iam_policy_document.opencost[0].json
+    retraining     = data.aws_iam_policy_document.retraining[0].json
   } : {}
 
   # aws_iam_policy 의 description 은 AWS 에 수정 API 가 없어 Terraform 이 '정책을 지우고 다시 만든다'
@@ -520,6 +558,7 @@ locals {
     simulator      = "simulator-sa: S3 simulator/ 쓰기 전용(status.json)."
     eso            = "external-secrets: RDS 비번 시크릿 GetSecretValue + 엔드포인트 파라미터 GetParameter."
     opencost       = "opencost: Athena 쿼리 실행 + Glue 카탈로그 읽기 + CUR 원본 읽기 + Athena 결과 읽기쓰기(ARN 미배선 시 빈 정책)."
+    retraining     = "retraining-sa: S3 models/latest/ 읽기쓰기(모델·metadata) + DynamoDB 오답노트 Scan·UpdateItem(PutItem 없음)."
   }
 }
 
