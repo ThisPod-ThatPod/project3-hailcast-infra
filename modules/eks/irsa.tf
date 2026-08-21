@@ -463,11 +463,17 @@ data "aws_iam_policy_document" "opencost" {
 
   # Athena 가 결과를 쓰기 전에 출력 위치를 목록 조회한다 — 없으면 쿼리 자체가 실패한다.
   # predict 의 ListBucketForTrafficShards 와 같은 이유로 대상은 버킷 자체이고 조건으로 좁힌다.
+  #
+  # cur_prefix 도 같은 조건에 넣는다(2026-08-21 실측 추가). ReadCurData 의 GetObject 만으로는
+  #    부족하다 — Athena 가 CUR 테이블을 스캔할 때 파티션 위치 아래를 ListBucket 으로도 훑는다.
+  #    athena-results/* 만 열어 뒀을 때 실제 쿼리가 이렇게 거부됐다:
+  #    "not authorized to perform: s3:ListBucket on resource: hailcast-dev-cur-15c95bad
+  #     because no identity-based policy allows the s3:ListBucket action"
   dynamic "statement" {
     for_each = var.cur_bucket_arn == null ? [] : [var.cur_bucket_arn]
 
     content {
-      sid       = "ListAthenaResultsPrefix"
+      sid       = "ListCurAndAthenaResultsPrefix"
       effect    = "Allow"
       actions   = ["s3:ListBucket"]
       resources = [statement.value]
@@ -475,7 +481,7 @@ data "aws_iam_policy_document" "opencost" {
       condition {
         test     = "StringLike"
         variable = "s3:prefix"
-        values   = ["${var.athena_results_prefix}/*"]
+        values   = ["${var.athena_results_prefix}/*", "${var.cur_prefix}/*"]
       }
     }
   }
@@ -489,6 +495,26 @@ data "aws_iam_policy_document" "opencost" {
       effect    = "Allow"
       actions   = ["s3:GetBucketLocation"]
       resources = [statement.value]
+    }
+  }
+
+  # OpenCost 가 Spot 인스턴스 실단가를 조회한다(Cloud Costs 의 Spot 비용 계산 경로).
+  # DescribeSpotPriceHistory 는 AWS 문서상 리소스 수준 권한을 지원하지 않는 액션이라
+  #    Resource="*" 가 불가피하다(lbctrl·karpenter 벤더링 정책의 무조건 statement 와 같은 유형).
+  #    조회 전용(Describe)이라 계정 안의 다른 자원을 바꾸지 못한다. 다른 statement 들과 달리
+  #    특정 ARN 에 기대지 않아 dynamic 가드가 필요 없다 — enable_app_irsa 로만 켜진다.
+  # 리소스로는 못 좁혀도 조건으로는 좁힌다 — AWS 문서가 이 액션에 ec2:Region 조건키를
+  #    지원한다고 명시해서, 우리 리전(ap-northeast-2) 하나로 건다.
+  statement {
+    sid       = "ReadSpotPriceHistory"
+    effect    = "Allow"
+    actions   = ["ec2:DescribeSpotPriceHistory"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:Region"
+      values   = [data.aws_region.current.region]
     }
   }
 }
