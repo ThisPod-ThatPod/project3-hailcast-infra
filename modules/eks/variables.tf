@@ -128,7 +128,7 @@ variable "model_bucket_arn" {
     앱의 유일한 상태 저장소인 S3 버킷 ARN (storage output).
     이름은 '모델' 버킷이지만 앱이 DB 를 빼면서(app common/core/store.py:2) 콜 기록·트래픽 집계·
     스케일 이력·대시보드·날씨 CSV 까지 전부 이 버킷 하나를 지나간다.
-    IRSA 4종(predict·call-api·worker·weather-cron)이 프리픽스별로 잘라 쓴다 — 표는 irsa.tf 참조.
+    IRSA 6종(predict·call-api·worker·weather-cron·simulator·retraining)이 프리픽스별로 잘라 쓴다 — 표는 irsa.tf 참조.
   EOT
   type        = string
   default     = null
