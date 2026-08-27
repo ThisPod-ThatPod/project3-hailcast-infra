@@ -63,11 +63,11 @@ variable "cluster_editor_principal_arns" {
 
 variable "enable_night_shutdown" {
   description = <<-EOT
-    야간 절전(§5-8) 스위치. 기본 true — 매일 KST 02~10시에 시스템 노드그룹·RDS 를 내렸다 올린다.
-    시연·밤샘 작업 날은 false 로 apply 하거나 콘솔에서 스케줄을 DISABLED 로 바꾼다.
+    야간 절전(§5-8) 스위치. 매일 KST 02~10시에 시스템 노드그룹·RDS 를 내렸다 올린다.
+    기본 false — 상시 가동 비용을 실측해 FinOps 자료로 쓰려고 꺼둔다.
   EOT
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_edge" {
@@ -93,5 +93,5 @@ variable "alb_dns_name" {
     비밀 아님(공개 DNS) → CI 정합 위해 기본값에 실값을 둔다.
   EOT
   type        = string
-  default     = "k8s-hailcastdev-6ad81285b1-452291380.ap-northeast-2.elb.amazonaws.com"
+  default     = "k8s-hailcastdev-6ad81285b1-209652505.ap-northeast-2.elb.amazonaws.com"
 }

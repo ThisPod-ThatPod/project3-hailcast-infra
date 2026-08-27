@@ -45,7 +45,7 @@ project3-hailcast-infra/
 │   ├── data/                # RDS, SQS 콜 큐, Karpenter 중단 큐, DynamoDB, Parameter Store
 │   ├── cicd/                # GitHub Actions OIDC 역할 (ECR push, tf plan, tf apply)
 │   ├── edge/                # Route53, ACM, CloudFront (enable_edge 스위치, 기본 true)
-│   └── schedule/            # 야간 절전 EventBridge Scheduler (enable_night_shutdown 스위치, 기본 true)
+│   └── schedule/            # 야간 절전 EventBridge Scheduler (enable_night_shutdown 스위치, 기본 false)
 ├── docs/
 │   ├── 네이밍규약서.md      # 모든 이름과 팀 계약의 단일 진실원천(SSOT)
 │   └── 비용관리.md          # 예산, 태그 커버리지, destroy 순서 런북
@@ -63,10 +63,14 @@ VPC `10.0.0.0/16`, AZ 2a와 2c.
 | 계층 | 구성 |
 | --- | --- |
 | 진입 | ALB(배포팀 Ingress가 생성). 그 앞단에 Route53, ACM, CloudFront(`enable_edge` 기본 true, NS 위임과 ALB가 선행 조건) |
-| 컴퓨트 | EKS. 시스템 노드그룹(관리형)에 플랫폼 파드, 앱 파드는 Karpenter가 공급하는 Spot 노드에 |
+| 컴퓨트 | EKS. 관리형 System 노드그룹(2대 고정)에 플랫폼 도구, 앱 워크로드는 주로 Karpenter Spot 노드에 뜬다. taint나 nodeSelector로 강제하지는 않는다 |
 | 데이터 | S3(모델, 날씨, 트래픽 샤드), RDS PostgreSQL Single-AZ(콜, 예측, 스케일링 이력), DynamoDB(오답노트), SQS(콜 큐와 Karpenter 중단 큐), Secrets Manager(RDS 자동 생성 비번), Parameter Store(RDS 엔드포인트) |
 | 비용 | S3 CUR 버킷(AWS 청구 리포트와 Athena 쿼리 결과). OpenCost가 실청구액을 읽는 경로다 |
 | 접근, 보안 | SSH 인바운드 없음(SSM Session Manager). RDS 5432는 노드 SG에서 온 것만. 파드 권한은 IRSA로 역할별 분리 |
+
+파드 간 데이터 흐름:
+
+![파드 아키텍처](./docs/images/pod-architecture.png)
 
 노드와 서브넷 배치 상세:
 
@@ -85,15 +89,14 @@ VPC `10.0.0.0/16`, AZ 2a와 2c.
   environment 승인을 거친 dev 브랜치 전용이다. apply 역할의 방어선은 IAM 정책이 아니라
   신뢰정책이다(environment, 워크플로 파일, 브랜치를 고정).
 - 비용을 설계 범위에 넣었다. 전 리소스 비용 태그, 예산 경보, K8s가 만든 자원까지 걷어내는
-  teardown 순서 런북(비용관리.md)까지를 인프라가 책임진다.
+  teardown 순서 런북(비용관리.md)까지를 인프라 담당자(계정 주인)가 책임진다.
 - 개발 기간 비용은 스케줄로 줄인다. EventBridge Scheduler가 Lambda 없이 AWS API를 직접 불러
-  매일 KST 02~10시에 시스템 노드그룹과 RDS를 내렸다 올린다(`enable_night_shutdown`, 기본 true).
+  매일 KST 02~10시에 시스템 노드그룹과 RDS를 내렸다 올린다(`enable_night_shutdown`, 기본 false).
   서비스 기능이 아니라 학습 기간 예산 장치다.
 
 ## 5. 협업 규약
 
 - 브랜치: `main`(보호) ← `dev`(통합, PR + 승인 1) ← `feature/*`
-- 승인 수는 전 레포 1이다. infra만 2로 올리는 안이 있었으나 인원 재편으로 리뷰 가능 인원이 줄어 폐기했다
 - 커밋: `Type(scope): 제목` 형식. 예: `Feat(eks): ...`, `Docs(규약서): ...`
 - 이름을 바꿀 때는 코드보다 규약서를 먼저 고치고 팀에 공유한다. 규약서가 SSOT다.
 
