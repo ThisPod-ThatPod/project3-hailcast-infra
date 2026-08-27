@@ -46,6 +46,12 @@ output "node_security_group_id" {
   value       = aws_security_group.node.id
 }
 
+# ── ALB 인바운드 제한 (B안) ──
+output "alb_cloudfront_sg_id" {
+  description = "ALB 인바운드를 CloudFront 로만 제한하는 SG ID. 배포팀이 Ingress annotation security-groups 에 사용."
+  value       = aws_security_group.alb_cloudfront_only.id
+}
+
 output "node_group_name" {
   description = "system 관리형 노드그룹 이름."
   value       = aws_eks_node_group.system.node_group_name

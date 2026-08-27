@@ -53,7 +53,7 @@ module "eks" {
   cluster_admin_principal_arns  = var.cluster_admin_principal_arns
   cluster_editor_principal_arns = var.cluster_editor_principal_arns
 
-  # ── IRSA 앱 8종 배선 (predict · call-api · worker · weather-cron · keda · karpenter · simulator · eso) ──
+  # ── IRSA 앱 9종 배선 (predict · call-api · worker · weather-cron · keda · karpenter · simulator · eso · opencost) ──
   # 자식 모듈은 형제 모듈을 볼 수 없다(module.storage 를 modules/eks 안에서 못 쓴다).
   # 그래서 '루트가 output 을 읽어 다음 모듈의 변수로 넘기는' 이 중계가 유일한 방법이다(§4).
   #
@@ -70,6 +70,15 @@ module "eks" {
   prediction_log_table_arn = module.data.prediction_log_table_arn
   rds_master_secret_arn    = module.data.rds_master_secret_arn
   rds_endpoint_param_arn   = module.data.rds_endpoint_param_arn
+
+  # OpenCost IRSA(11번째) 배선 — CUR/Glue/Athena(storage → eks). 프리픽스 2종은 storage
+  # 변수 기본값과 짝이 맞아야 한다(어긋나면 정책이 엉뚱한 경로를 연다 · irsa.tf 주석 참고).
+  cur_bucket_arn        = module.storage.cur_bucket_arn
+  glue_database_arn     = module.storage.glue_database_arn
+  glue_database_name    = module.storage.glue_database_name
+  athena_workgroup_arn  = module.storage.athena_workgroup_arn
+  cur_prefix            = module.storage.cur_prefix
+  athena_results_prefix = module.storage.athena_results_prefix
 }
 
 # ── 스토리지: app 이미지용 ECR 레포(call-api·predict·weather-cron·worker) + S3 ──

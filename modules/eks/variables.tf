@@ -128,7 +128,7 @@ variable "model_bucket_arn" {
     앱의 유일한 상태 저장소인 S3 버킷 ARN (storage output).
     이름은 '모델' 버킷이지만 앱이 DB 를 빼면서(app common/core/store.py:2) 콜 기록·트래픽 집계·
     스케일 이력·대시보드·날씨 CSV 까지 전부 이 버킷 하나를 지나간다.
-    IRSA 4종(predict·call-api·worker·weather-cron)이 프리픽스별로 잘라 쓴다 — 표는 irsa.tf 참조.
+    IRSA 6종(predict·call-api·worker·weather-cron·simulator·retraining)이 프리픽스별로 잘라 쓴다 — 표는 irsa.tf 참조.
   EOT
   type        = string
   default     = null
@@ -169,6 +169,48 @@ variable "karpenter_interruption_queue_arn" {
   description = "Karpenter 중단 큐 ARN (data output). Spot 회수 2분 경고를 수신한다 — 없으면 중단 처리가 통째로 꺼진다(§5-4)."
   type        = string
   default     = null
+}
+
+# ── OpenCost Cloud Costs(Level 2) — storage 의 CUR/Glue/Athena 를 읽을 IRSA ──
+# opencost 는 다른 앱 IRSA 와 달리 model_bucket_arn 대신 이 4종을 받는다. 아직 배포팀이
+# opencost 매니페스트를 만들지 않아(§5-3 은 10종 그대로), null 이면 irsa.tf 가 statement 를
+# 건너뛴다 — prediction_log_table_arn 과 같은 dynamic 패턴이다.
+variable "cur_bucket_arn" {
+  description = "CUR 저장 버킷 ARN (storage output). OpenCost 가 CUR 원본을 읽고 Athena 쿼리 결과를 쓴다."
+  type        = string
+  default     = null
+}
+
+variable "glue_database_arn" {
+  description = "CUR Glue 데이터베이스 ARN (storage output)."
+  type        = string
+  default     = null
+}
+
+variable "glue_database_name" {
+  description = "CUR Glue 데이터베이스 이름 (storage output). 테이블 ARN(database/*)을 이 모듈 안에서 조립할 때 쓴다."
+  type        = string
+  default     = null
+}
+
+variable "athena_workgroup_arn" {
+  description = "OpenCost 전용 Athena workgroup ARN (storage output)."
+  type        = string
+  default     = null
+}
+
+# opencost 정책이 cur_bucket_arn 아래 프리픽스를 잘라 쓰려면 이 문자열이 필요하다(storage
+# 모듈의 변수 기본값과 반드시 같아야 한다 — 어긋나면 정책이 엉뚱한 경로를 열거나 좁힌다).
+variable "cur_prefix" {
+  description = "CUR 원본이 쌓이는 S3 프리픽스 (storage output `cur_prefix`)."
+  type        = string
+  default     = "cur"
+}
+
+variable "athena_results_prefix" {
+  description = "Athena 쿼리 결과가 쌓이는 S3 프리픽스 (storage output `athena_results_prefix`)."
+  type        = string
+  default     = "athena-results"
 }
 
 # ── 클러스터 출입 명단 (access.tf) ────────────────────────────────────────
